@@ -1,0 +1,10 @@
+import { Hono } from 'hono';
+import { AppError,errorResponse } from '../../../packages/core/src/errors';
+export type Env={DB:{prepare(sql:string):{first():Promise<unknown>}};QUEUE:{send(value:unknown):Promise<void>};REPORTS:unknown;SERPAPI_API_KEY?:string};
+const app=new Hono<{Bindings:Env}>();
+app.use('*',async(c,next)=>{const requestId=c.req.header('x-request-id')??crypto.randomUUID();c.header('x-request-id',requestId);c.header('x-content-type-options','nosniff');c.header('referrer-policy','strict-origin-when-cross-origin');c.header('content-security-policy',"default-src 'self'");await next()});
+app.get('/api/health',c=>c.json({status:'ok',timestamp:new Date().toISOString()}));
+app.get('/api/health/database',async c=>{try{await c.env.DB.prepare('SELECT 1').first();return c.json({status:'ok'})}catch{return c.json({status:'unavailable'},503)}});
+app.post('/api/runs',async c=>{const requestId=c.req.header('x-request-id')!;try{const body=await c.req.json<{projectId:string;idempotencyKey:string}>();if(!body.projectId||!body.idempotencyKey)throw new AppError('VALIDATION_ERROR','Project and idempotency key are required.',400);await c.env.QUEUE.send({type:'RUN_CREATED',...body,requestId});return c.json({success:true,status:'QUEUED',requestId},202)}catch(error){return c.json(errorResponse(error,requestId),400)}});
+app.onError((error,c)=>c.json(errorResponse(error,c.req.header('x-request-id')??crypto.randomUUID()),500));
+export default app;
