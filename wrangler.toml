@@ -1,0 +1,19 @@
+name = "ai-overview-hub-api"
+main = "apps/api/src/index.ts"
+compatibility_date = "2026-08-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ai-overview-hub"
+database_id = "configure-per-environment"
+
+[[r2_buckets]]
+binding = "REPORTS"
+bucket_name = "ai-overview-hub-reports"
+
+[[queues.producers]]
+binding = "QUEUE"
+queue = "visibility-runs"
+
+[triggers]
+crons = ["0 8 * * *"]
