@@ -10,7 +10,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
-    "test": "vitest run --coverage.enabled=false",
+    "test": "vitest run --root . --coverage.enabled=false",
     "test:watch": "vitest",
     "security:audit": "npm audit --audit-level=high"
   },

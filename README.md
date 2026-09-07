@@ -16,7 +16,7 @@ Mock providers are enabled with `USE_MOCK_SERP_PROVIDERS=true`; they are determi
 
 ## Configuration and integrations
 
-All configuration is environment-based; see `.env.example`. SerpApi adapters share a normalized interface but retain raw responses separately. Stripe Checkout uses subscriptions, automatic tax, billing-address collection, and webhook-authoritative lifecycle changes. Sentry-compatible reporting and email are optional adapters. Aikido is a separate security control and its CI step activates only when `AIKIDO_TOKEN` exists. Never put production secrets in `.env` or source control.
+All configuration is environment-based; see `.env.example`. SerpApi adapters share a normalized interface but retain raw responses separately. Stripe Checkout uses subscriptions, automatic tax, billing-address collection, and webhook-authoritative lifecycle changes. Structured console reporting and email are optional adapters. CI dependency installation is wrapped with Aikido Safe Chain, which runs without an Aikido token or API URL. Never put production secrets in `.env` or source control.
 
 ## Data and deployment
 
