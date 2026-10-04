@@ -1,0 +1,2 @@
+INSERT OR IGNORE INTO providers (id,name,active) VALUES ('google-ai-overview','Google AI Overview',1),('google-ai-mode','Google AI Mode',1),('bing-copilot','Bing Copilot',1),('duckduckgo-search-assist','DuckDuckGo',1),('naver-ai-overview','Naver',1),('perplexity','Perplexity',1),('chatgpt','ChatGPT',1);
+UPDATE plans SET allowed_providers='["google-ai-overview","google-ai-mode","bing-copilot","duckduckgo-search-assist","naver-ai-overview","perplexity","chatgpt"]' WHERE id='starter';
