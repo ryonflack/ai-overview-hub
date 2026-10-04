@@ -6,7 +6,7 @@ import { citationsFrom } from './shared';
 
 export { SerpApiProvider } from './serpapi';
 export { OpenAIChatGPTProvider,PerplexityProvider } from './answerEngines';
-export interface ProviderCredentials { serpApiKey?:string; perplexityApiKey?:string; perplexityModel?:string; openaiApiKey?:string; openaiModel?:string }
+export interface ProviderCredentials { serpApiKey?:string; perplexityApiKey?:string; perplexityPreset?:string; openaiApiKey?:string; openaiModel?:string }
 
 export class MockProvider implements AIVisibilityProvider {
   readonly name:string;
@@ -15,5 +15,5 @@ export class MockProvider implements AIVisibilityProvider {
   async normalizeResult(raw:unknown):Promise<NormalizedAIResult>{const r=raw as {text?:string;references?:unknown;search_metadata?:{id?:string}};const citations=citationsFrom(r.references);return{provider:this.id,answerPresent:Boolean(r.text),answerText:r.text??'',citations,uniqueDomains:[...new Set(citations.map(c=>c.domain))],searchId:r.search_metadata?.id,executedAt:new Date().toISOString(),metadata:{engine:'mock'}}}
 }
 
-const live=(id:ProviderId,c:ProviderCredentials):AIVisibilityProvider=>id==='perplexity'?new PerplexityProvider(c.perplexityApiKey??'',c.perplexityModel||undefined):id==='chatgpt'?new OpenAIChatGPTProvider(c.openaiApiKey??'',c.openaiModel||undefined):new SerpApiProvider(id,c.serpApiKey??'');
+const live=(id:ProviderId,c:ProviderCredentials):AIVisibilityProvider=>id==='perplexity'?new PerplexityProvider(c.perplexityApiKey??'',c.perplexityPreset||undefined):id==='chatgpt'?new OpenAIChatGPTProvider(c.openaiApiKey??'',c.openaiModel||undefined):new SerpApiProvider(id,c.serpApiKey??'');
 export const createProviders=(mock:boolean,credentials:ProviderCredentials={})=>Object.fromEntries(providerIds.map(id=>[id,mock?new MockProvider(id):live(id,credentials)])) as Record<ProviderId,AIVisibilityProvider>;
