@@ -1,5 +1,10 @@
-export const providerIds = ['google-ai-overview','google-ai-mode','bing-copilot','duckduckgo-search-assist','naver-ai-overview'] as const;
+export const serpApiProviderIds = ['google-ai-overview','google-ai-mode','bing-copilot','duckduckgo-search-assist','naver-ai-overview'] as const;
+export const answerEngineProviderIds = ['perplexity','chatgpt'] as const;
+export const providerIds = [...serpApiProviderIds,...answerEngineProviderIds] as const;
+export type SerpApiProviderId = typeof serpApiProviderIds[number];
+export type AnswerEngineProviderId = typeof answerEngineProviderIds[number];
 export type ProviderId = typeof providerIds[number];
+export const providerNames:Record<ProviderId,string>={'google-ai-overview':'Google AI Overview','google-ai-mode':'Google AI Mode','bing-copilot':'Bing Copilot','duckduckgo-search-assist':'DuckDuckGo','naver-ai-overview':'Naver','perplexity':'Perplexity','chatgpt':'ChatGPT'};
 export type JobState = 'PENDING'|'RUNNING'|'RETRY'|'SUCCESS'|'FAILED';
 export type RunStatus = 'QUEUED'|'RUNNING'|'COMPLETED'|'COMPLETED_WITH_ERRORS'|'FAILED';
 export interface QueryInput { query:string; locale?:string; requestId:string }

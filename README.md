@@ -1,6 +1,6 @@
 # AI Overview Hub
 
-AI Overview Hub is a focused SaaS workspace for monitoring brand citations and mentions in Google AI Overview, Google AI Mode, Bing Copilot, DuckDuckGo Search Assist, and Naver AI results. It retains historical provider results, calculates visibility metrics, and produces XLSX and zipped CSV reports.
+AI Overview Hub is a focused SaaS workspace for monitoring brand citations and mentions in Google AI Overview, Google AI Mode, Bing Copilot, DuckDuckGo Search Assist, Naver AI results, ChatGPT search, and Perplexity. It retains historical provider results, calculates visibility metrics, and produces XLSX and zipped CSV reports.
 
 ## Local development
 
@@ -16,7 +16,7 @@ Mock providers are enabled with `USE_MOCK_SERP_PROVIDERS=true`; they are determi
 
 ## Configuration and integrations
 
-All configuration is environment-based; see `.env.example`. SerpApi adapters share a normalized interface but retain raw responses separately. Stripe Checkout uses subscriptions, automatic tax, billing-address collection, and webhook-authoritative lifecycle changes. Structured console reporting and email are optional adapters. CI dependency installation is wrapped with Aikido Safe Chain, which runs without an Aikido token or API URL. Never put production secrets in `.env` or source control.
+All configuration is environment-based; see `.env.example`. SerpApi adapters (Google, Bing, DuckDuckGo, Naver) and the direct answer-engine adapters (Perplexity via `PERPLEXITY_API_KEY`, ChatGPT via `OPENAI_API_KEY`) share a normalized interface but retain raw responses separately. Stripe Checkout uses subscriptions, automatic tax, billing-address collection, and webhook-authoritative lifecycle changes. Structured console reporting and email are optional adapters. CI dependency installation is wrapped with Aikido Safe Chain, which runs without an Aikido token or API URL. Never put production secrets in `.env` or source control.
 
 ## Data and deployment
 
