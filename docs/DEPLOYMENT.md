@@ -24,3 +24,7 @@ service that consumes them rather than copying them into the static web build.
 4. Apply versioned D1 migrations, deploy the Worker, then publish `dist/` to Pages.
 5. Configure `aioverviewhub.com`, `app.aioverviewhub.com`, and optionally `api.aioverviewhub.com` through environment URLs, Stripe production webhooks/tax/portal, WAF/rate limits, Queue DLQ, R2 lifecycle/backups, Cron, monitoring, and alerts.
 6. Verify health, a live subscription, provider sandbox calls, partial failure, signed downloads, email, restore procedure, and counsel-approved policies before traffic.
+
+## Admin control panel (admin.aioverviewhub.com)
+
+The operator panel is a second Vercel project from this repository with **Root Directory** `apps/admin`; `apps/admin/vercel.json` installs from the repository root, runs `npm run build:admin`, proxies `/api/admin/*` to the API, and sets strict security headers. Add `admin.aioverviewhub.com` to that project and its DNS record in Cloudflare (DNS-only until the certificate is issued). API-side secrets, the first operator and migration `0004` are covered in `docs/ADMIN.md`.

@@ -1,6 +1,6 @@
 # Project status and next steps
 
-_Last updated: 2026-10-04. Work is paused here; this is the hand-off note._
+_Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 
 ## Done to date
 
@@ -41,23 +41,24 @@ _Last updated: 2026-10-04. Work is paused here; this is the hand-off note._
 3. **Run execution.** A queue consumer that loads the project, calls `executeRun` with `createProviders(providerConfigFromEnv(env))`, stores `run_queries` / `provider_results` / `citations`, and writes `usage_events` with `method` and `addon`.
 4. **Reports, history and billing pages** connected to real data, using Stripe Checkout and the Customer Portal.
 
-## Next: admin control panel (for the operator)
-Nothing has been built yet. Proposed approach:
-- **A separate app, `apps/admin`, in this repo,** deployed as its own Vercel project (root directory `apps/admin`) on its own domain, e.g. `admin.aioverviewhub.com`. No admin code ships to customers.
-- **Admin-only routes** under `/api/admin/*`, with every change written to `audit_events`.
-- **Separate admin login:** an operator users table (not the customer `account_users.admin` role), email login link plus an authenticator-app code. Optionally, Vercel password protection on the admin domain as a second layer.
-- **Controls for individual customers (draft list):**
-  - Turn individual sources and methods on or off for an account.
-  - Override the simulated vendor (Oxylabs or DataForSEO) for an account.
-  - Change query limits and add-on pricing, or waive add-on charges.
-  - View usage and run history.
-  - Re-run failed checks.
-  - Pause or reactivate an account.
+## Admin control panel (for the operator): first version built
+See `docs/ADMIN.md` for pages, cost model, security and setup.
+- **`apps/admin`**: a separate Vite app, deployed as its own Vercel project (root directory `apps/admin`) on `admin.aioverviewhub.com`. Pages: Overview, Costs (cost per resource, vendor and customer), Revenue, Performance (provider health, job queue, webhooks, Vercel deployments), Data sources (vendor switching, source kill switches, cost rates), Accounts (with per-account controls) and Audit log.
+- **`/api/admin/*`** on the existing API (`apps/api/src/admin.ts`). Every change is written to `audit_events`.
+- **Operator sign-in**: a separate `operators` table, an emailed one-time link plus an authenticator-app code, and 12-hour `__Host-` session cookies.
+- **Runtime routing**: the env vendor settings stay the defaults; operators can override them globally or per account without a redeploy, and `/api/sources` already honours the global setting.
+- **Cost tracking**: migration `0004_admin.sql` adds per-check vendor, cost, latency and completion time, plus `vendor_rates` for vendors that don't report cost.
+- 23 tests (`tests/admin.test.ts`) run the admin API against the real migrations in SQLite.
 
-### Open decisions (needed before building the admin panel)
-1. **The final list of controls** in the admin panel. Is the draft above right, and what's missing?
-2. **Admin login method:** email link plus authenticator code, or something else such as Google sign-in?
-3. **Hosting:** keep the API on Cloudflare Workers (as `docs/DEPLOYMENT.md` assumes), or move the backend to Vercel too. Decide before the admin panel is built on it.
+### Decisions taken (change if needed)
+1. **Login**: email link plus authenticator code, as proposed. No email adapter exists yet, so links are logged (`EMAIL_PROVIDER=console`) until one is wired up.
+2. **Hosting**: the API stays on Cloudflare Workers. The admin Vercel project proxies `/api/admin/*` to `https://api.aioverviewhub.com`.
+3. **Controls**: the draft list, plus vendor cost rates and global source kill switches.
+
+### Still to do for the panel
+- The run consumer must enforce account controls and write cost/latency per check (details in `docs/ADMIN.md`). Until it exists, metrics show only stored data.
+- Handle `JOB_RETRY` queue messages; set `subscriptions.created_at`/`canceled_at` from Stripe webhooks.
+- Vercel request metrics need a log drain (no public query API); the panel links to Vercel Observability for now.
 
 ## Before launch: checklist
 - Set real credentials: `SERPAPI_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `OXYLABS_*` and/or `DATAFORSEO_*`, and `SIMULATED_VENDOR`.
@@ -66,5 +67,6 @@ Nothing has been built yet. Proposed approach:
   - Confirm `OPENAI_MODEL` (default `gpt-5-mini`) is still a current model.
   - Decide whether ChatGPT API answers should always search (`tool_choice: "required"`).
 - Set `plans.addon_unit_price` and create the matching Stripe metered price.
-- Apply migrations `0002` and `0003`.
+- Apply migrations `0002`, `0003` and `0004`.
+- Admin panel: set `ADMIN_TOTP_KEY`, `ADMIN_URL`, `ADMIN_ORIGIN`, the `VERCEL_*` read token and project IDs, create the first operator, and enter vendor cost rates.
 - Known location limits: Oxylabs supports country only (no region or city). Bing, DuckDuckGo and Naver don't use location at all.
