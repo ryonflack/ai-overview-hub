@@ -16,7 +16,7 @@ Mock providers are enabled with `USE_MOCK_SERP_PROVIDERS=true`; they are determi
 
 ## Configuration and integrations
 
-All configuration is environment-based; see `.env.example`. SerpApi adapters (Google, Bing, DuckDuckGo, Naver) and the direct answer-engine adapters (Perplexity via `PERPLEXITY_API_KEY`, ChatGPT via `OPENAI_API_KEY`) share a normalized interface but retain raw responses separately. Stripe Checkout uses subscriptions, automatic tax, billing-address collection, and webhook-authoritative lifecycle changes. Structured console reporting and email are optional adapters. CI dependency installation is wrapped with Aikido Safe Chain, which runs without an Aikido token or API URL. Never put production secrets in `.env` or source control.
+All configuration is environment-based; see `.env.example`. Customers choose, per project, which AI sources to monitor, the country and language, and for ChatGPT and Perplexity whether answers come from the official API, a user-simulated session, or both. SerpApi (search engines), the OpenAI and Perplexity APIs, and Oxylabs or DataForSEO (user-simulated answers, chosen by the operator) share a normalized interface but retain raw responses separately; see `docs/PROVIDERS.md`. Stripe Checkout uses subscriptions, automatic tax, billing-address collection, and webhook-authoritative lifecycle changes. Structured console reporting and email are optional adapters. CI dependency installation is wrapped with Aikido Safe Chain, which runs without an Aikido token or API URL. Never put production secrets in `.env` or source control.
 
 ## Data and deployment
 
