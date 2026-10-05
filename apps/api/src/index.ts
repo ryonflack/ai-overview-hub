@@ -1,10 +1,22 @@
 import { Hono } from 'hono';
 import { AppError,errorResponse } from '../../../packages/core/src/errors';
-export type Env={DB:{prepare(sql:string):{first():Promise<unknown>}};QUEUE:{send(value:unknown):Promise<void>};REPORTS:unknown;SERPAPI_API_KEY?:string};
+import { countries,defaultLocation,languages,locationAwareProviders,methodLabels,normalizeLocation,providerMethods,quoteRun,sourceKey } from '../../../packages/core/src/sources';
+import { providerIds,providerNames } from '../../../packages/core/src/types';
+import type { CollectionMethod,ProviderId } from '../../../packages/core/src/types';
+import { providerConfigFromEnv,sourceAvailability } from '../../../packages/providers/src/index';
+import { applyRouting,maskAvailability } from '../../../packages/admin/src/routing';
+import admin,{ loadGlobalRouting } from './admin';
+import type { AdminEnv } from './admin';
+export type Env=AdminEnv&{REPORTS:unknown;SERPAPI_API_KEY?:string;PERPLEXITY_API_KEY?:string;PERPLEXITY_PRESET?:string;OPENAI_API_KEY?:string;OPENAI_MODEL?:string;OXYLABS_USERNAME?:string;OXYLABS_PASSWORD?:string;DATAFORSEO_LOGIN?:string;DATAFORSEO_PASSWORD?:string;SIMULATED_VENDOR?:string;SIMULATED_VENDOR_CHATGPT?:string;SIMULATED_VENDOR_PERPLEXITY?:string;USE_MOCK_SERP_PROVIDERS?:string};
 const app=new Hono<{Bindings:Env}>();
 app.use('*',async(c,next)=>{const requestId=c.req.header('x-request-id')??crypto.randomUUID();c.header('x-request-id',requestId);c.header('x-content-type-options','nosniff');c.header('referrer-policy','strict-origin-when-cross-origin');c.header('content-security-policy',"default-src 'self'");await next()});
 app.get('/api/health',c=>c.json({status:'ok',timestamp:new Date().toISOString()}));
 app.get('/api/health/database',async c=>{try{await c.env.DB.prepare('SELECT 1').first();return c.json({status:'ok'})}catch{return c.json({status:'unavailable'},503)}});
+// Source catalog for the portal. Availability reflects configured credentials; backend vendors are deliberately not exposed.
+// Operator routing (admin panel) can switch the simulated vendor or switch a source off; disabled sources read as unavailable.
+app.get('/api/sources',async c=>{const requestId=c.req.header('x-request-id')!;try{const {config,disabled}=applyRouting(providerConfigFromEnv(c.env),await loadGlobalRouting(c.env.DB));const available=maskAvailability(sourceAvailability(config),disabled);return c.json({success:true,methods:methodLabels,providers:providerIds.map(id=>({id,name:providerNames[id],locationAware:locationAwareProviders.includes(id),methods:providerMethods[id].map(method=>({method,available:available[sourceKey(id,method)]}))})),countries:countries.map(([code,name,language])=>({code,name,language})),languages:languages.map(([code,name])=>({code,name})),defaultLocation})}catch{return c.json(errorResponse(new AppError('CONFIGURATION_ERROR','AI sources are temporarily unavailable.',503),requestId),503)}});
+app.post('/api/quote',async c=>{const requestId=c.req.header('x-request-id')!;try{const body=await c.req.json<{queries:number;providers:ProviderId[];methods?:Partial<Record<ProviderId,CollectionMethod[]>>;location?:Record<string,string>}>();const plan=await c.env.DB.prepare('SELECT max_queries,allowed_providers,addon_unit_price FROM plans WHERE id=? AND active=1').bind('starter').first<{max_queries:number;allowed_providers:string;addon_unit_price:number|null}>();if(!plan)throw new AppError('CONFIGURATION_ERROR','No active plan is configured.',503);const location=normalizeLocation(body.location);const quote=quoteRun({providers:body.providers??[],methods:body.methods},Number(body.queries),{maxQueries:plan.max_queries,allowedProviders:JSON.parse(plan.allowed_providers),addonUnitPrice:plan.addon_unit_price});return c.json({success:true,quote,location})}catch(error){return c.json(errorResponse(error,requestId),error instanceof AppError?error.status as 400:400)}});
 app.post('/api/runs',async c=>{const requestId=c.req.header('x-request-id')!;try{const body=await c.req.json<{projectId:string;idempotencyKey:string}>();if(!body.projectId||!body.idempotencyKey)throw new AppError('VALIDATION_ERROR','Project and idempotency key are required.',400);await c.env.QUEUE.send({type:'RUN_CREATED',...body,requestId});return c.json({success:true,status:'QUEUED',requestId},202)}catch(error){return c.json(errorResponse(error,requestId),400)}});
+app.route('/api/admin',admin);
 app.onError((error,c)=>c.json(errorResponse(error,c.req.header('x-request-id')??crypto.randomUUID()),500));
 export default app;

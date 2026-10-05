@@ -7,12 +7,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: 22, cache: npm}
-      - run: npm ci
+      - name: Install dependencies with Aikido Safe Chain
+        run: npx --yes @aikidosec/safe-chain npm ci
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm audit --audit-level=high
-      - name: Aikido scan
-        if: ${{ secrets.AIKIDO_TOKEN != '' }}
-        env: {AIKIDO_TOKEN: '${{ secrets.AIKIDO_TOKEN }}'}
-        run: npx --yes @aikidosec/safe-chain npm test

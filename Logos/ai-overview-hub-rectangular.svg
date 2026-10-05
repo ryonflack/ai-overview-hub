@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="title description">
+  <title id="title">AI Overview Hub logo</title>
+  <desc id="description">Rectangular AI Overview Hub logo with a blue AI tile and navy wordmark.</desc>
+  <rect width="1200" height="400" fill="#fbfaf7"/>
+  <rect x="90" y="90" width="220" height="220" rx="36" fill="#569ddf"/>
+  <text x="200" y="235" fill="#17203b" font-family="Arial, Helvetica, sans-serif" font-size="112" font-weight="700" text-anchor="middle">AI</text>
+  <text x="365" y="230" fill="#17203b" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="700" letter-spacing="2">Overview Hub</text>
+</svg>
