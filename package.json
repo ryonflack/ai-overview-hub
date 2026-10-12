@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "security:audit": "npm audit --audit-level=high",
     "admin:key": "node scripts/create-operator.mjs --generate-key",
-    "admin:operator": "node scripts/create-operator.mjs"
+    "admin:operator": "node scripts/create-operator.mjs",
+    "demo:accounts": "node scripts/seed-demo-accounts.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

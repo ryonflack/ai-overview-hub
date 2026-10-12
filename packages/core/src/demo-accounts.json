@@ -1,0 +1,87 @@
+{
+  "_comment": "Fictional demo customers shared by the portal's workspace switcher and scripts/seed-demo-accounts.mjs. Domains use the reserved .example TLD so nothing points at a real business.",
+  "accounts": [
+    {
+      "id": "demo_northwind",
+      "name": "Northwind CRM",
+      "industry": "B2B software",
+      "domain": "northwindcrm.example",
+      "alternateDomains": ["northwind.example"],
+      "brands": ["Northwind", "Northwind CRM"],
+      "owner": {"name": "Alex Morgan", "email": "alex@northwindcrm.example"},
+      "location": {"country": "US", "language": "en"},
+      "frequency": "monthly",
+      "createdAt": "2026-06-04T15:00:00Z",
+      "strength": 0.3,
+      "methods": {"google-ai-overview": ["simulated"], "google-ai-mode": ["simulated"], "chatgpt": ["api", "simulated"], "perplexity": ["api", "simulated"], "bing-copilot": ["simulated"], "duckduckgo-search-assist": ["simulated"], "naver-ai-overview": ["simulated"]},
+      "competitors": ["hubspot.com", "salesforce.com", "reddit.com", "zoho.com", "pipedrive.com", "g2.com"],
+      "queries": [
+        ["best CRM for small teams", "Comparison"], ["top client management software", "Comparison"], ["best CRM for startups", "Comparison"],
+        ["CRM with email automation", "Feature"], ["how to choose a CRM", "Research"], ["CRM tools for agencies", "Industry"],
+        ["simple CRM for freelancers", "Industry"], ["CRM pricing comparison", "Pricing"], ["free CRM alternatives", "Pricing"],
+        ["CRM with pipeline reporting", "Feature"], ["what is a sales CRM", "Research"], ["CRM for real estate agents", "Industry"]
+      ]
+    },
+    {
+      "id": "demo_bluefin",
+      "name": "Bluefin Outdoor",
+      "industry": "Outdoor retail",
+      "domain": "bluefinoutdoor.example",
+      "alternateDomains": [],
+      "brands": ["Bluefin", "Bluefin Outdoor"],
+      "owner": {"name": "Jordan Lee", "email": "jordan@bluefinoutdoor.example"},
+      "location": {"country": "US", "language": "en", "region": "Colorado"},
+      "frequency": "monthly",
+      "createdAt": "2026-07-12T15:00:00Z",
+      "strength": 0.2,
+      "methods": {"google-ai-overview": ["simulated"], "google-ai-mode": ["simulated"], "chatgpt": ["simulated"], "perplexity": ["api"], "bing-copilot": ["simulated"]},
+      "competitors": ["rei.com", "outdoorgearlab.com", "backpacker.com", "reddit.com", "switchbacktravel.com", "amazon.com"],
+      "queries": [
+        ["best ultralight backpacking tent", "Product"], ["best hiking boots for wide feet", "Product"], ["warmest sleeping bag under 300", "Product"],
+        ["how to choose a backpacking pack", "Research"], ["waterproof vs water resistant jacket", "Research"], ["best camping gear for beginners", "Comparison"],
+        ["trekking poles worth it", "Research"], ["best trail running shoes 2026", "Comparison"], ["outdoor gear store with free returns", "Purchase"],
+        ["lightweight camp stove comparison", "Comparison"]
+      ]
+    },
+    {
+      "id": "demo_harbor",
+      "name": "Harbor & Pine Legal",
+      "industry": "Professional services",
+      "domain": "harborpinelegal.example",
+      "alternateDomains": [],
+      "brands": ["Harbor & Pine", "Harbor and Pine"],
+      "owner": {"name": "Sam Patel", "email": "sam@harborpinelegal.example"},
+      "location": {"country": "GB", "language": "en", "city": "London"},
+      "frequency": "monthly",
+      "createdAt": "2026-08-02T09:00:00Z",
+      "strength": 0.12,
+      "methods": {"google-ai-overview": ["simulated"], "google-ai-mode": ["simulated"], "chatgpt": ["api"], "perplexity": ["api"]},
+      "competitors": ["gov.uk", "citizensadvice.org.uk", "lawsociety.org.uk", "which.co.uk", "reddit.com", "thelawpages.com"],
+      "queries": [
+        ["how to contest a will in england", "Research"], ["employment solicitor london", "Local"], ["how much does a divorce cost uk", "Pricing"],
+        ["unfair dismissal claim time limit", "Research"], ["best conveyancing solicitors london", "Local"], ["what does a probate solicitor do", "Research"],
+        ["no win no fee employment lawyer", "Pricing"], ["lasting power of attorney cost", "Pricing"]
+      ]
+    },
+    {
+      "id": "demo_sola",
+      "name": "Sola Dental Group",
+      "industry": "Healthcare",
+      "domain": "soladental.example",
+      "alternateDomains": ["soladentalgroup.example"],
+      "brands": ["Sola Dental"],
+      "owner": {"name": "Riley Chen", "email": "riley@soladental.example"},
+      "location": {"country": "AU", "language": "en", "region": "New South Wales", "city": "Sydney"},
+      "frequency": "monthly",
+      "createdAt": "2026-08-20T01:00:00Z",
+      "strength": 0.24,
+      "methods": {"google-ai-overview": ["simulated"], "google-ai-mode": ["simulated"], "chatgpt": ["api"], "perplexity": ["api"], "bing-copilot": ["simulated"]},
+      "competitors": ["healthdirect.gov.au", "ada.org.au", "hotdoc.com.au", "whitecoat.com.au", "reddit.com", "healthengine.com.au"],
+      "queries": [
+        ["teeth whitening cost sydney", "Pricing"], ["emergency dentist open sunday sydney", "Local"], ["invisalign vs braces for adults", "Comparison"],
+        ["how much is a dental implant in australia", "Pricing"], ["best family dentist inner west", "Local"], ["is teeth whitening safe", "Research"],
+        ["dentist that bulk bills kids", "Local"], ["how often should you get a dental check up", "Research"], ["root canal recovery time", "Research"]
+      ]
+    }
+  ]
+}
