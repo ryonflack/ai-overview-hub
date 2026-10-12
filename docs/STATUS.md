@@ -27,9 +27,15 @@ _Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 - `0002_answer_engines.sql` registers ChatGPT and Perplexity and adds them to the starter plan.
 - `0003_collection_methods.sql` adds per-project methods and location, add-on pricing, and `method` on run jobs and usage events. It was tested against existing data with foreign keys enforced.
 
+### Beta labelling and methodology page
+- The site is labelled **Beta** everywhere: a banner on the marketing site ("Try it risk-free: no contract, cancel anytime"), a Beta pill on the logo, and a beta strip inside the portal.
+- **How our rankings work** (`apps/web/src/Methodology.tsx`, at `/#how-rankings-work`) is linked from the footer, the beta banner and the portal sidebar. It explains the process and metric definitions at a high level and deliberately names no vendors or collection infrastructure. Keep it that way when editing.
+
 ### Customer portal (`apps/web`): screens only, not functional yet
-- The overview dashboard and the **AI sources** page exist: choose engines, Direct API / User-simulated / Both, location, and see a live per-run quote. Mobile has its own navigation.
-- **Not done yet:** there's no customer login, and settings save only in the browser (`localStorage`), not to the server. The other menu items (Projects, Queries, Reports, Billing, Settings) are placeholders.
+- Every menu item is a working screen on example data (`apps/web/src/Portal.tsx`): Overview, Projects, AI sources, Queries (add, filter, remove; capped at 100), Reports (real XLSX / CSV-zip downloads generated in the browser from a demo run via `packages/reporting`, loaded lazily), Billing (plan, usage, invoices) and Settings (profile, brand names and alternate domains, schedule, email notifications). Mobile has a scrolling tab bar.
+- **Demo customer accounts.** Four fictional customers (Northwind CRM, Bluefin Outdoor, Harbor & Pine Legal, Sola Dental Group) live in `packages/core/src/demo-accounts.json`, with different industries, countries, AI sources and run histories. The portal's sidebar switcher (a dropdown on mobile) moves between them, and every screen, including the overview metrics and report downloads, is generated from that account's data. Domains and emails use the reserved `.example` domain.
+- **Seeding the demo accounts into the database:** `npm run demo:accounts > demo.sql`, then `npx wrangler d1 execute ai-overview-hub --remote --file demo.sql`. Add `-- --owner you@yourdomain.com` to make yourself an owner of every demo account, ready for when customer login exists. `-- --remove` prints SQL that deletes them all. Demo subscriptions use status `demo`, so the admin panel lists them but leaves them out of MRR. The seed adds accounts, owners, projects, domains and queries, not run history.
+- **Not done yet:** there's no customer login, and queries, sources and settings save only in the browser (`localStorage`), not to the server. "New project" and "Manage payment & cancel" are disabled until the projects API and the Stripe Customer Portal are wired up.
 
 ### Quality
 - 44 automated tests cover providers, routing, locations, quoting, the API endpoints and exports. Lint, typecheck (now including the API app) and the build pass.
