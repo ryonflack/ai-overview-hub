@@ -35,6 +35,11 @@ _Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 - 44 automated tests cover providers, routing, locations, quoting, the API endpoints and exports. Lint, typecheck (now including the API app) and the build pass.
 - None of this has been run against the real APIs. Adapters follow each vendor's documentation and are tested with sample responses.
 
+## Stripe (sandbox configured 2026-10-17)
+- Sandbox account set up: product, $69.99/month price (lookup key `starter_monthly`), Customer Portal, and a webhook endpoint for subscription events. IDs and the go-live table are in `docs/BILLING.md`.
+- `POST /api/stripe/webhook` records subscriptions from Stripe events (migration `0005_stripe_webhooks.sql`, tests in `tests/billing.test.ts`). Checkout now tags subscriptions with the account and requires a billing address and accepts tax IDs.
+- Not done: checkout and portal endpoints for customers (they need customer login), the add-on metered price (`addon_unit_price` undecided), the Stripe Tax head office address and registrations, and live mode.
+
 ## Next: customer portal (make it real)
 1. **Customer login.** Email-verified accounts, secure session cookies, Turnstile on sign-up and login (see `docs/SECURITY.md`).
 2. **Projects API, scoped to each account.** Create and edit projects, domains and queries. Save AI-source selections and location to `projects.source_methods` / `projects.location`, replacing the browser-only save.
@@ -57,7 +62,7 @@ See `docs/ADMIN.md` for pages, cost model, security and setup.
 
 ### Still to do for the panel
 - The run consumer must enforce account controls and write cost/latency per check (details in `docs/ADMIN.md`). Until it exists, metrics show only stored data.
-- Handle `JOB_RETRY` queue messages; set `subscriptions.created_at`/`canceled_at` from Stripe webhooks.
+- Handle `JOB_RETRY` queue messages. (`subscriptions.created_at`/`canceled_at` are now written by the Stripe webhook.)
 - Vercel request metrics need a log drain (no public query API); the panel links to Vercel Observability for now.
 
 ## Before launch: checklist
@@ -67,6 +72,7 @@ See `docs/ADMIN.md` for pages, cost model, security and setup.
   - Confirm `OPENAI_MODEL` (default `gpt-5-mini`) is still a current model.
   - Decide whether ChatGPT API answers should always search (`tool_choice: "required"`).
 - Set `plans.addon_unit_price` and create the matching Stripe metered price.
-- Apply migrations `0002`, `0003` and `0004`.
+- Stripe live mode: follow the table in `docs/BILLING.md` (product, price, webhook endpoint, portal, Tax head office and registrations), then set the live `STRIPE_*` secrets.
+- Apply migrations `0002` to `0005`.
 - Admin panel: set `ADMIN_TOTP_KEY`, `ADMIN_URL`, `ADMIN_ORIGIN`, the `VERCEL_*` read token and project IDs, create the first operator, and enter vendor cost rates.
 - Known location limits: Oxylabs supports country only (no region or city). Bing, DuckDuckGo and Naver don't use location at all.
