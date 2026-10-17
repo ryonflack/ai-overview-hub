@@ -23,7 +23,7 @@
     "demo:accounts": "node scripts/seed-demo-accounts.mjs"
   },
   "dependencies": {
-    "@neondatabase/neon-js": "latest",
+    "@neondatabase/auth": "latest",
     "@neondatabase/serverless": "latest",
     "@vercel/functions": "latest",
     "@vitejs/plugin-react": "latest",
