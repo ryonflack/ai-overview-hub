@@ -3,20 +3,21 @@ import {AppError} from '../../../packages/core/src/errors';
 import {countries,defaultLocation,languages,locationAwareProviders,methodLabels,normalizeLocation,providerMethods,quoteRun,sourceKey} from '../../../packages/core/src/sources';
 import {answerEngineProviderIds,providerIds,providerNames,serpApiProviderIds} from '../../../packages/core/src/types';
 import type {CollectionMethod,Location,ProviderId,SourceKey} from '../../../packages/core/src/types';
+import type {DemoAccount} from './demo';
 
 type Selection=Partial<Record<ProviderId,CollectionMethod[]>>;
 type Choice='api'|'simulated'|'both';
-// Until projects persist through the authenticated API, the portal keeps the draft per browser.
-const DRAFT_KEY='aoh.sources.draft';
+// Until projects persist through the authenticated API, the portal keeps each demo account's draft per browser.
+const draftKey=(account:DemoAccount)=>`aoh.sources.draft.${account.id}`;
 const PLAN={maxQueries:100,addonUnitPrice:null as number|null,allowedProviders:[...providerIds]};
-const initial:{selection:Selection;location:Location;queries:number}={selection:{'google-ai-overview':['simulated'],'google-ai-mode':['simulated'],'bing-copilot':['simulated'],chatgpt:['api'],perplexity:['api']},location:defaultLocation,queries:100};
-const loadDraft=()=>{try{const raw=localStorage.getItem(DRAFT_KEY);return raw?{...initial,...JSON.parse(raw)}:initial}catch{return initial}};
+type Draft={selection:Selection;location:Location;queries:number};
+const loadDraft=(account:DemoAccount):Draft=>{const initial:Draft={selection:account.methods,location:{...defaultLocation,...account.location},queries:account.queries.length};try{const raw=localStorage.getItem(draftKey(account));return raw?{...initial,...JSON.parse(raw)}:initial}catch{return initial}};
 const choiceOf=(methods?:CollectionMethod[]):Choice|undefined=>!methods?.length?undefined:methods.length>1?'both':methods[0];
 const methodsOf=(choice:Choice):CollectionMethod[]=>choice==='both'?['api','simulated']:[choice];
 const money=(cents:number)=>`$${(cents/100).toFixed(2)}`;
 
-export function SourcesSettings(){
-  const[draft]=useState(loadDraft);
+export function SourcesSettings({account}:{account:DemoAccount}){
+  const[draft]=useState(()=>loadDraft(account));
   const[selection,setSelection]=useState<Selection>(draft.selection);
   const[location,setLocation]=useState<Location>(draft.location);
   const[queries,setQueries]=useState<number>(draft.queries);
@@ -30,7 +31,7 @@ export function SourcesSettings(){
   const toggle=(id:ProviderId)=>update({...selection,[id]:selection[id]?.length?[]:[providerMethods[id].find(m=>isAvailable(id,m))??providerMethods[id][0]]});
   const choose=(id:ProviderId,choice:Choice)=>update({...selection,[id]:methodsOf(choice)});
   const setLoc=(patch:Partial<Location>)=>{setLocation(l=>({...l,...patch}));setSaved('idle')};
-  const save=()=>{if(!quote.value)return;try{localStorage.setItem(DRAFT_KEY,JSON.stringify({selection,location:normalizeLocation(location),queries}));setSaved('saved')}catch{setSaved('error')}};
+  const save=()=>{if(!quote.value)return;try{localStorage.setItem(draftKey(account),JSON.stringify({selection,location:normalizeLocation(location),queries}));setSaved('saved')}catch{setSaved('error')}};
   const country=countries.find(c=>c[0]===location.country);
   return <div className="dash sources">
     <div className="dash-head"><div><small>PROJECT SETTINGS</small><h2>AI sources</h2></div><button onClick={save} disabled={!quote.value}>{saved==='saved'?'Saved ✓':'Save sources'}</button></div>
