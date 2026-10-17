@@ -34,6 +34,10 @@ describe('portal sign-in and accounts',()=>{let db:TestDB;
     const me=await (await call('/me',{token:await token('u9','me@acme.test')})).json() as {account:{id:string}};expect(me.account.id).toBe('demo_a');
     expect(await db.raw.get("SELECT auth_id FROM users WHERE id='demo_owner_1'")).toEqual({auth_id:'u9'})});
 
+  it('sends one welcome email when the workspace is created',async()=>{const sent:{to:string;subject:string}[]=[];const realFetch=globalThis.fetch;globalThis.fetch=(async(url:string|URL|Request,init?:RequestInit)=>{if(String(url).includes('resend.com')){sent.push(JSON.parse(String(init!.body)));return new Response('{"id":"em_1"}')}return realFetch(url,init)}) as typeof fetch;
+    try{const {default:app}=await import('../apps/api/src/index');const t=await token();const me=()=>app.request('/api/app/me',{headers:{authorization:`Bearer ${t}`}},portalEnv(db,{RESEND_API_KEY:'re_test'}));await Promise.all([me(),me()]);await me()}finally{globalThis.fetch=realFetch}
+    expect(sent).toEqual([expect.objectContaining({to:'owner@acme.test',subject:'Welcome to AI Overview Hub'})])});
+
   it('only lets members act on a workspace',async()=>{await call('/me');expect((await call('/me',{account:'acct_someone_else'})).status).toBe(403)});
 
   it('saves the project and enforces query rules',async()=>{expect((await call('/queries',{method:'POST',body:JSON.stringify({text:'best crm'})})).status).toBe(409);
@@ -96,6 +100,12 @@ describe('portal billing and runs',()=>{let db:TestDB;let stripe:{calls:{method:
     await call('/project',{method:'PUT',body:JSON.stringify({primaryDomain:'example.com',selection:{chatgpt:['api']}})});
     const res=await call('/runs',{method:'POST'},{USE_MOCK_SERP_PROVIDERS:'false',OPENAI_API_KEY:'sk-test',PLATFORM_MONTHLY_CHECK_CAP:'1'});expect(res.status).toBe(503);expect(((await res.json()) as {error:{message:string}}).error.message).toMatch(/at capacity/);
     expect(await db.raw.get('SELECT COUNT(*) n FROM runs')).toEqual({n:1})});
+
+  it('emails owners when a run fails completely, and accepts the SERP_API_KEY name',async()=>{await subscribe();await setup();await call('/project',{method:'PUT',body:JSON.stringify({primaryDomain:'example.com',selection:{'google-ai-mode':['simulated']}})});
+    const sent:{subject:string}[]=[];const realFetch=globalThis.fetch;globalThis.fetch=(async(url:string|URL|Request,init?:RequestInit)=>{const u=String(url);if(u.includes('resend.com')){sent.push(JSON.parse(String(init!.body)));return new Response('{"id":"em_1"}')}if(u.includes('serpapi.com'))return new Response('{"error":"Invalid API key."}',{status:401});return realFetch(url,init)}) as typeof fetch;
+    try{const res=await call('/runs',{method:'POST'},{USE_MOCK_SERP_PROVIDERS:'false',SERP_API_KEY:'serp-test',RESEND_API_KEY:'re_test'});expect(res.status).toBe(201);
+      for(let i=0;i<8;i++){await db.raw.run("UPDATE run_queries SET next_attempt_at=NULL");const {progress}=await (await call('/runs/advance',{method:'POST'},{USE_MOCK_SERP_PROVIDERS:'false',SERP_API_KEY:'serp-test',RESEND_API_KEY:'re_test'})).json() as {progress:{remaining:number}};if(!progress.remaining)break}}finally{globalThis.fetch=realFetch}
+    expect(await db.raw.get('SELECT status FROM runs')).toEqual({status:'FAILED'});expect(sent.map(m=>m.subject)).toEqual(['Your AI visibility run for Ada\'s workspace couldn’t complete'])});
 
   it('refuses sources the operator has not configured',async()=>{await subscribe();await setup();const res=await call('/runs',{method:'POST'},{USE_MOCK_SERP_PROVIDERS:'false'});expect(res.status).toBe(409);expect(((await res.json()) as {error:{message:string}}).error.message).toMatch(/unavailable right now/)});
 

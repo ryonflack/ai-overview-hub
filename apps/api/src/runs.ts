@@ -7,7 +7,7 @@ import { callCost } from '../../../packages/admin/src/metrics';
 import type { VendorRate } from '../../../packages/admin/src/metrics';
 import { applyRouting,maskAvailability,sourceVendor } from '../../../packages/admin/src/routing';
 import { createProviders,providerConfigFromEnv,sourceAvailability } from '../../../packages/providers/src/index';
-import { sendEmail } from '../../../packages/email/src/index';
+import { notifyRun } from './notifications';
 import { loadAccountControls,loadGlobalRouting } from './admin';
 import type { AdminDB } from './admin';
 import { all,exec,loadProject,one,periodUsage,planFor,projectQueries } from './app';
@@ -118,7 +118,7 @@ export async function finalizeRuns(db:AdminDB,env:Env){
   for(const run of ready){const status:RunStatus=run.ok===run.total?'COMPLETED':run.ok?'COMPLETED_WITH_ERRORS':'FAILED';const at=iso();
     const changed=await exec(db,"UPDATE runs SET status=?,completed_at=? WHERE id=? AND status IN ('QUEUED','RUNNING')",status,at,run.id);if(!changed.meta?.changes)continue;finished++;
     await exec(db,"UPDATE projects SET last_run_at=?,next_run_at=CASE WHEN frequency='monthly' THEN ? ELSE next_run_at END WHERE id=?",at,addMonth(at),run.project_id);
-    await notifyRun(db,env,run.account_id,run.id).catch(error=>console.error(JSON.stringify({level:'error',event:'run_notification_failed',runId:run.id,message:String(error)})));
+    await notifyRun(db,env,run.account_id,run.id,await runSummaries(db,run.account_id,5)).catch(error=>console.error(JSON.stringify({level:'error',event:'run_notification_failed',runId:run.id,message:String(error)})));
   }
   return finished;
 }
@@ -137,17 +137,6 @@ export async function loadRun(db:AdminDB,accountId:string,runId:string):Promise<
   const rows=await all<{query_id:string;query_text:string;provider_id:ProviderId;method:CollectionMethod;status:JobState;attempts:number;error_code:string|null;error_message:string|null;duration_ms:number|null;normalized_json:string|null;cited:number|null;mentioned:number|null;citation_position:number|null}>(db,'SELECT q.query_id,q.query_text,q.provider_id,q.method,q.status,q.attempts,q.error_code,q.error_message,q.duration_ms,p.normalized_json,p.cited,p.mentioned,p.citation_position FROM run_queries q LEFT JOIN provider_results p ON p.run_query_id=q.id WHERE q.run_id=? ORDER BY q.query_text,q.provider_id,q.method',runId);
   const results:RunResult[]=rows.map(r=>({queryId:r.query_id,query:r.query_text,provider:r.provider_id,method:r.method,status:r.status,result:json<NormalizedAIResult|undefined>(r.normalized_json,undefined),customerCited:r.cited===1,customerMentioned:r.mentioned===1,citationPosition:r.citation_position??undefined,durationMs:r.duration_ms??undefined,...(r.status==='FAILED'?{error:{code:r.error_code??'PROVIDER_ERROR',message:r.error_message??'Provider request failed.',attempts:r.attempts}}:{})}));
   return{id:run.id,accountId,projectId:run.project_id,status:run.status,results,createdAt:run.created_at,completedAt:run.completed_at??undefined,requestId:run.request_id};
-}
-
-async function notifyRun(db:AdminDB,env:Env,accountId:string,runId:string){
-  const account=await one<{name:string;notify_run:number;notify_drop:number}>(db,'SELECT name,notify_run,notify_drop FROM accounts WHERE id=?',accountId);if(!account)return;
-  const [latest,previous]=(await runSummaries(db,accountId,5)).filter(r=>r.status!=='FAILED'&&r.status!=='QUEUED'&&r.status!=='RUNNING');if(!latest||latest.id!==runId)return;
-  const drop=previous?Math.round((previous.visibility-latest.visibility)*10)/10:0;const dropped=drop>5;
-  if(!account.notify_run&&!(account.notify_drop&&dropped))return;
-  const to=(await all<{email:string}>(db,"SELECT u.email FROM account_users au JOIN users u ON u.id=au.user_id WHERE au.account_id=? AND au.role IN ('owner','admin')",accountId)).map(u=>u.email);if(!to.length)return;
-  const appUrl=String(env.APP_URL||'https://www.aioverviewhub.com').replace(/\/+$/,'');
-  const lines=[`Your AI visibility run for ${account.name} has finished.`,'',`AI visibility: ${latest.visibility}%${previous?` (${dropped?'down':'was'} ${previous.visibility}%)`:''}`,`Citation rate: ${latest.citationRate}%`,`Mention rate: ${latest.mentionRate}%`,`Checks: ${latest.done-latest.failed} of ${latest.total} succeeded`,'',`See the full report: ${appUrl}/#/reports`,'',`You can change these emails in Settings.`];
-  await sendEmail(env,{to,subject:dropped?`AI visibility dropped ${drop} points for ${account.name}`:`AI visibility report ready: ${latest.visibility}%`,text:lines.join('\n')});
 }
 
 /** Monthly projects whose next run is due get a scheduled run. Failures (no subscription, quota) push the date a month on. */

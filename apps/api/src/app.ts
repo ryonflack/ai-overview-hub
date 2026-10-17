@@ -10,6 +10,7 @@ import { neonAuthBaseUrl,verifyNeonToken } from '../../../packages/auth/src/inde
 import type { NeonUser } from '../../../packages/auth/src/index';
 import { billingGateway } from '../../../packages/billing/src/stripe';
 import type { AdminDB } from './admin';
+import { deliver,sendWelcome } from './notifications';
 
 /** Customer portal API, served at /api/app. Every route needs a Neon Auth JWT (Authorization: Bearer) and acts on one account the
  * user belongs to: their only one, or the one named by the x-account-id header. A user's first request creates their account. */
@@ -46,12 +47,13 @@ async function linkUser(db:AdminDB,auth:NeonUser):Promise<Member>{
 export const memberships=(db:AdminDB,userId:string)=>all<AccountRef>(db,"SELECT a.id,a.name,au.role FROM account_users au JOIN accounts a ON a.id=au.account_id WHERE au.user_id=? ORDER BY CASE au.role WHEN 'owner' THEN 0 ELSE 1 END,a.created_at",userId);
 
 /** First sign-in: one account per user, with a deterministic id so concurrent first requests cannot create two. */
-async function ensureAccount(db:AdminDB,user:Member):Promise<AccountRef[]>{
-  const existing=await memberships(db,user.userId);if(existing.length)return existing;
+async function ensureAccount(db:AdminDB,user:Member):Promise<{accounts:AccountRef[];created:boolean}>{
+  const existing=await memberships(db,user.userId);if(existing.length)return{accounts:existing,created:false};
   const id=`acct_${user.userId.replace(/^usr_/,'')}`;const name=user.name?`${user.name}'s workspace`:`${user.email.split('@')[1]??'My'} workspace`;
-  await exec(db,'INSERT INTO accounts (id,name,created_at) VALUES (?,?,?) ON CONFLICT (id) DO NOTHING',id,name.slice(0,80),now());
+  // Only the request whose insert creates the account reports it as new, so the welcome email is sent once.
+  const created=await one(db,'INSERT INTO accounts (id,name,created_at) VALUES (?,?,?) ON CONFLICT (id) DO NOTHING RETURNING id',id,name.slice(0,80),now());
   await exec(db,"INSERT INTO account_users (account_id,user_id,role) VALUES (?,?,'owner') ON CONFLICT DO NOTHING",id,user.userId);
-  return memberships(db,user.userId);
+  return{accounts:await memberships(db,user.userId),created:Boolean(created)};
 }
 
 const portal=new Hono<{Bindings:PortalEnv;Variables:Vars}>();
@@ -59,7 +61,8 @@ portal.use('*',async(c,next)=>{c.set('requestId',c.req.header('x-request-id')??c
   const token=/^Bearer\s+(.+)$/i.exec(c.req.header('authorization')??'')?.[1];
   if(!token)throw new AppError('AUTHENTICATION_ERROR','Sign in to continue.',401);
   const baseUrl=neonAuthBaseUrl(c.env);const auth=await verifyNeonToken(token,baseUrl,c.env.NEON_AUTH_JWKS);
-  const user=await linkUser(c.env.DB,auth);const accounts=await ensureAccount(c.env.DB,user);
+  const user=await linkUser(c.env.DB,auth);const {accounts,created}=await ensureAccount(c.env.DB,user);
+  if(created)await deliver(c.env,'welcome',()=>sendWelcome(c.env,user));
   const wanted=c.req.header('x-account-id');const account=wanted?accounts.find(a=>a.id===wanted):accounts[0];
   if(!account)throw new AppError('AUTHORIZATION_ERROR','You do not have access to this workspace.',403);
   c.set('user',user);c.set('account',account);await next()});
