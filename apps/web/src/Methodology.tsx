@@ -25,7 +25,7 @@ const notes=[
 export function Methodology({back}:{back:()=>void}){
   return <main className="method">
     <button className="text back" onClick={back}>← Back</button>
-    <section className="method-hero"><span className="eyebrow">METHODOLOGY</span><h1>How our rankings work</h1><p>A plain-language look at how AI Overview Hub turns AI search answers into the visibility numbers on your dashboard.</p></section>
+    <section className="method-hero"><span className="eyebrow">METHODOLOGY</span><h1>How rankings work</h1><p>A plain-language look at how AI Overview Hub turns AI search answers into the visibility numbers on your dashboard.</p></section>
     <section className="method-steps">{steps.map(([n,title,body])=><article key={n}><strong>{n}</strong><h2>{title}</h2><p>{body}</p></article>)}</section>
     <section className="method-block"><h2>What the numbers mean</h2><dl>{metrics.map(([term,def])=><div key={term}><dt>{term}</dt><dd>{def}</dd></div>)}</dl></section>
     <section className="method-block"><h2>Good to know</h2><div className="method-notes">{notes.map(([title,body])=><article key={title}><h3>{title}</h3><p>{body}</p></article>)}</div></section>
