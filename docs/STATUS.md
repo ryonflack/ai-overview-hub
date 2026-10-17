@@ -91,6 +91,7 @@ See `docs/ADMIN.md` for pages, cost model, security and setup.
   - Confirm `OPENAI_MODEL` (default `gpt-5-mini`) is still a current model.
   - Decide whether ChatGPT API answers should always search (`tool_choice: "required"`).
 - Set `plans.addon_unit_price` and create the matching Stripe metered price.
+- Allow search engines: remove the `x-robots-tag` route in `scripts/build-vercel.mjs` and the `robots` meta tag in `apps/web/index.html` (the admin site stays `noindex`).
 - Company email addresses (`support@`, `hello@`, `billing@`, `notifications@`) send and receive; see Next, item 2.
 - Stripe live mode: follow the table in `docs/BILLING.md` (product, price, webhook endpoint, portal, Tax head office and registrations), then set the live `STRIPE_*` secrets.
 - Migrations apply automatically on each Vercel build; confirm `schema_migrations` lists `0001` to `0006` in production.
