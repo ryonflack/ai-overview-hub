@@ -1,30 +1,46 @@
 # Deployment
 
-## Vercel web deployment with Cloudflare DNS
+Everything runs on **Vercel**. **Cloudflare only hosts DNS** for `aioverviewhub.com`; no Cloudflare compute, storage or queues are used.
 
-The repository-level `vercel.json` configures Vercel to run the Vite build from
-the repository root and serve the generated `dist/` directory. Use Node.js 22,
-which is also enforced by `package.json`.
+| Piece | Where |
+|---|---|
+| Customer site + API | Vercel project `ai-overview-hub-public` (repository root). Production: `www.aioverviewhub.com` (`main`). Staging: `aio-staging.aioverviewhub.com` (`staging` branch, Preview environment) |
+| Operator panel | Vercel project for `apps/admin`, on `admin.aioverviewhub.com`; it proxies `/api/admin/*` to `https://www.aioverviewhub.com` |
+| Database | Neon Postgres, attached through the Vercel Neon integration (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`) |
+| Payments | Stripe: sandbox for Preview/staging, live account for Production (see `docs/BILLING.md`) |
 
-After the first successful Vercel deployment, add the production domain to the
-Vercel project and create the DNS record Vercel requests in Cloudflare. Keep the
-record DNS-only until Vercel has issued and verified its certificate; Cloudflare
-proxying can be enabled afterward if desired. DNS management does not require a
-Cloudflare Pages deployment.
+## How a deployment is built
 
-Set browser-exposed deployment values (for example, the API base URL) in Vercel.
-Keep Worker, D1, R2, Queue, Stripe, and provider secrets in Cloudflare or the
-service that consumes them rather than copying them into the static web build.
+`vercel.json` runs `npm run vercel-build`:
 
-## Cloudflare application deployment
+1. `scripts/migrate.mjs` applies pending `migrations/*.sql` to that environment's Neon database, each in a transaction, recorded in `schema_migrations`, under an advisory lock. It fails the build if `DATABASE_URL` is missing, so code never ships ahead of its schema. Migrations must be forward-compatible: the previous deployment keeps serving until the new one is promoted.
+2. `npm run build` type-checks and builds the customer site into `dist/`.
+3. `scripts/build-vercel.mjs` writes Vercel's Build Output (`.vercel/output`): `dist/` as static files, and the Hono API (`apps/api/src/vercel.ts`) bundled into a single Node.js 22 function. `/api` and `/api/*` go to the function; everything else is served from the static files.
 
-1. Provision Pages, Worker, D1, R2, Queue, and Turnstile resources; replace placeholder binding IDs.
-2. Store SerpApi, Stripe, email, session, and Turnstile credentials in environment secret stores; Safe Chain does not require an Aikido token or API URL.
-3. Run Safe Chain-protected dependency installation, lint, type checking, tests, build, dependency/secret scans, and API authorization tests.
-4. Apply versioned D1 migrations, deploy the Worker, then publish `dist/` to Pages.
-5. Configure `aioverviewhub.com`, `app.aioverviewhub.com`, and optionally `api.aioverviewhub.com` through environment URLs, Stripe production webhooks/tax/portal, WAF/rate limits, Queue DLQ, R2 lifecycle/backups, Cron, monitoring, and alerts.
-6. Verify health, a live subscription, provider sandbox calls, partial failure, signed downloads, email, restore procedure, and counsel-approved policies before traffic.
+## Environment variables
 
-## Admin control panel (admin.aioverviewhub.com)
+Set in the Vercel project under Settings → Environment Variables, with the **same names** in each environment and different values per environment. Production holds live values; Preview (which includes staging) holds test/sandbox values. Mark secrets as Sensitive. `.env.example` lists every variable.
 
-The operator panel is a second Vercel project from this repository with **Root Directory** `apps/admin`; `apps/admin/vercel.json` installs from the repository root, runs `npm run build:admin`, proxies `/api/admin/*` to the API, and sets strict security headers. Add `admin.aioverviewhub.com` to that project and its DNS record in Cloudflare (DNS-only until the certificate is issued). API-side secrets, the first operator and migration `0004` are covered in `docs/ADMIN.md`.
+## Customer sign-in (Neon Auth)
+
+The browser signs in through `/auth/*` on the site's own domain; the API forwards those requests to Neon Auth (`DATABASE_NEON_AUTH_BASE_URL`) so the session cookie is first-party. Each site address must be listed in the **Neon Console → Auth → Configuration → Domains** (localhost is allowed by default), otherwise sign-in fails with "Invalid origin". `/api/health/auth` reports whether the API can reach Neon Auth's signing keys.
+
+## Background work
+
+Runs are processed by the portal while it is open, by `/api/internal/worker` (it continues itself in the background while checks remain) and by a daily Vercel Cron (`15 6 * * *`, defined in `scripts/build-vercel.mjs`) that also starts due monthly runs. The worker requires `CRON_SECRET` (set for Production and Preview); Vercel Cron sends it automatically.
+
+## Deployment Protection and webhooks
+
+Preview deployments, including `aio-staging.aioverviewhub.com`, sit behind Vercel Authentication. Callers that can't log in, such as Stripe's webhooks, use the project's **Protection Bypass for Automation** secret as the `x-vercel-protection-bypass` query parameter on their URL. That secret is configured in Vercel and Stripe only, never in this repository.
+
+## DNS (Cloudflare)
+
+Add each domain to its Vercel project and create the DNS record Vercel asks for in Cloudflare. Keep records **DNS-only** (grey cloud): Vercel issues and renews the certificates. Proxying through Cloudflare in front of Vercel breaks certificate renewal and causes TLS errors (Cloudflare error 525).
+
+## Local development
+
+`npm run dev` (site, :4173), `npm run dev:api` (API, :8787, with an in-process PostgreSQL in `.data/pglite`, no account needed), `npm run dev:admin` (panel, :4174, proxies to :8787).
+
+## Before launch
+
+Verify health (`/api/health`, `/api/health/database`, `/api/health/billing`), a live subscription end to end, provider calls, partial failures, report downloads, email, a database restore (Neon branching / point-in-time restore), and counsel-approved policies before sending traffic.

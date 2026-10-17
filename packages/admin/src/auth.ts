@@ -1,6 +1,6 @@
 import { AppError } from '../../core/src/errors';
 
-/** Operator authentication primitives (WebCrypto only, so they run on Workers and Node 22). Sign-in is an emailed one-time link plus an authenticator-app code. */
+/** Operator authentication primitives (WebCrypto only, so they run on any runtime with Node 22's globals). Sign-in is an emailed one-time link plus an authenticator-app code. */
 export const LOGIN_TOKEN_TTL_MS=15*60_000;
 export const SESSION_TTL_MS=12*60*60_000;
 export const MAX_LOGIN_ATTEMPTS=5;

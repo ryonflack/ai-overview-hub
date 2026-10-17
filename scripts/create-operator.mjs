@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Creates an admin-panel operator: generates an authenticator secret, encrypts it with ADMIN_TOTP_KEY (same AES-GCM format as
 // packages/admin/src/auth.ts) and prints the otpauth URI to scan plus the SQL to apply. Nothing is written anywhere.
-//   npm run admin:key                                   -> prints a new ADMIN_TOTP_KEY to store with `wrangler secret put ADMIN_TOTP_KEY`
+//   npm run admin:key                                   -> prints a new ADMIN_TOTP_KEY to add as a Vercel environment variable (sensitive)
 //   ADMIN_TOTP_KEY=... npm run admin:operator -- you@example.com "Your Name"
-//   then: npx wrangler d1 execute ai-overview-hub --remote --command "<printed SQL>"
+//   then: run the printed SQL with psql "$DATABASE_URL" -c "<printed SQL>", or in the Neon SQL editor
 import { randomUUID, webcrypto as crypto } from 'node:crypto';
 const b64 = bytes => Buffer.from(bytes).toString('base64');
 if (process.argv[2] === '--generate-key') { console.log(b64(crypto.getRandomValues(new Uint8Array(32)))); process.exit(0); }
