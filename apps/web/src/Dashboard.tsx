@@ -1,5 +1,6 @@
 import {useMemo,useState} from 'react';
 import {Logo,RANKINGS_HASH} from './brand';
+import {MobileBar,useDrawer} from './MobileBar';
 import {demoAccounts,demoResult,formatDate,metricsFor,placeLabel,runsFor,sourceLabel,sourcesFor,visibleOn} from './demo';
 import type {DemoAccount} from './demo';
 import {Billing,Projects,Queries,Reports,Settings} from './Portal';
@@ -15,16 +16,17 @@ const loadAccount=()=>{try{return demoAccounts.find(a=>a.id===localStorage.getIt
 
 export function Dashboard({compact=false}:{compact?:boolean}){
   const[page,setPage]=useState<Page>('overview');const[account,setAccount]=useState<DemoAccount>(()=>compact?demoAccounts[0]:loadAccount());
+  const menu=useDrawer(`${page}:${account.id}`);
   const go=(id:Page)=>{setPage(id);if(!compact)scrollTo(0,0)};
   const switchTo=(id:string)=>{const next=demoAccounts.find(a=>a.id===id);if(!next)return;setAccount(next);setPage('overview');try{localStorage.setItem(ACCOUNT_KEY,id)}catch{/* storage unavailable */}};
   return <div className={`app ${compact?'compact':''}`}>
-    <aside><Logo/>
+    {!compact&&<MobileBar {...menu} title={pages.find(([id])=>id===page)?.[1].slice(2)??''}/>}
+    <aside id={compact?undefined:'portal-nav'} className={menu.open?'open':''}><Logo/>
       {compact?<div className="workspace">{account.name.toUpperCase()} <b>⌄</b></div>:<label className="workspace switcher"><span>DEMO ACCOUNT</span><select value={account.id} onChange={e=>switchTo(e.target.value)} aria-label="Switch demo account">{demoAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
       {pages.map(([id,label])=>{const live=!compact;return <div className={page===id?'active':live?'navlink':''} key={id} role={live?'button':undefined} tabIndex={live?0:undefined} onClick={live?()=>go(id):undefined} onKeyDown={live?e=>{if(e.key==='Enter'||e.key===' ')go(id)}:undefined}>{label}</div>})}
       {!compact&&<a className="sidelink" href={RANKINGS_HASH}>ⓘ How rankings work</a>}
       <div className="user">{initials(account.owner.name)} <span>{account.owner.name}<small>{account.owner.email}</small></span></div>
     </aside>
-    {!compact&&<div className="mobile-account"><select value={account.id} onChange={e=>switchTo(e.target.value)} aria-label="Switch demo account">{demoAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}{!compact&&<nav className="mobilenav" aria-label="Portal">{pages.map(([id,label])=><button key={id} className={page===id?'selected':''} onClick={()=>go(id)}>{label.slice(2)}</button>)}</nav>}
     <div className="portal-main">
       {!compact&&<div className="betastrip" role="note"><span className="beta-pill">Beta</span><span>You’re viewing <b>{account.name}</b>, a demo account with example data.</span><a href={RANKINGS_HASH}>How rankings work</a></div>}
       {page==='sources'?<SourcesSettings key={account.id} account={account}/>:page==='projects'?<Projects key={account.id} account={account} open={go}/>:page==='queries'?<Queries key={account.id} account={account}/>:page==='reports'?<Reports key={account.id} account={account}/>:page==='billing'?<Billing key={account.id} account={account}/>:page==='settings'?<Settings key={account.id} account={account}/>:<Overview account={account} compact={compact} go={go}/>}

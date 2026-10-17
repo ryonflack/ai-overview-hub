@@ -67,7 +67,7 @@ function ProjectForm({me,project,queries,saved}:{me:Me;project:Project|null;quer
       </section>
       <section className="panel"><div className="panelhead"><h3>Schedule</h3></div><div className="fields">
         <label>Run frequency<select value={frequency} onChange={e=>{setFrequency(e.target.value as 'manual'|'monthly');changed()}}><option value="monthly">Monthly, plus runs on demand</option><option value="manual">Only when I run it</option></select></label>
-      </div><p className="hint">Your plan includes {me.plan.runsPerPeriod} runs per billing period, scheduled and on-demand combined.</p></section>
+      </div><p className="hint">Your plan includes {me.plan.runsPerPeriod} runs and {me.plan.checksPerPeriod.toLocaleString()} answer checks per billing period, scheduled and on-demand combined.</p></section>
     </div>
     <div className="panel quote" aria-live="polite"><div className="panelhead"><h3>Each run</h3></div>
       {quote.value?<><dl><div><dt>Queries</dt><dd>{queries} / {me.plan.maxQueries}</dd></div><div><dt>Sources selected</dt><dd>{quote.value.sources}</dd></div><div><dt>Answer checks</dt><dd>{(queries*quote.value.sources).toLocaleString()}</dd></div><div className={quote.value.addonChecks?'addon':''}><dt>Add-on checks</dt><dd>{(queries*(quote.value.sources-new Set(providers).size)).toLocaleString()}</dd></div></dl>

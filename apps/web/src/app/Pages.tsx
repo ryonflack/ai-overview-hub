@@ -67,13 +67,13 @@ export function BillingPage({me,refresh}:{me:Me;refresh:()=>void}){
     <div className="twocol">
       <section className="panel plan"><div className="panelhead"><h3>{b.plan.name}</h3>{sub&&<span className={`status ${b.entitled?'ok':''}`}>{statusLabel[sub.status]??sub.status}</span>}</div>
         <b className="planprice">{money(b.plan.monthlyPrice)}<small>/ month, plus applicable tax</small></b>
-        <ul><li>Up to {b.plan.maxQueries} monitored queries</li><li>{b.plan.allowedProviders.length} AI search sources, including ChatGPT and Perplexity</li><li>{b.plan.runsPerPeriod} runs per billing period, with reports and XLSX/CSV exports</li></ul>
+        <ul><li>Up to {b.plan.maxQueries} monitored queries</li><li>{b.plan.allowedProviders.length} AI search sources, including ChatGPT and Perplexity</li><li>{b.plan.runsPerPeriod} runs and {b.plan.checksPerPeriod.toLocaleString()} answer checks per billing period, with reports and XLSX/CSV exports</li></ul>
         {!owner?<p className="hint">Only workspace owners can manage billing.</p>:b.entitled||(sub&&sub.status!=='canceled'&&sub.status!=='incomplete_expired')?<button disabled={busy} onClick={()=>void go('/billing/portal')}>{busy?'Opening…':'Manage payment & cancel'}</button>:<button disabled={busy} onClick={()=>void go('/billing/checkout')}>{busy?'Opening checkout…':'Subscribe'} <b>→</b></button>}
         <p className="hint">No contract. Cancel anytime from the billing portal and you won’t be charged again. Payments are handled securely by Stripe.</p>
       </section>
       <section className="panel"><div className="panelhead"><h3>This billing period</h3><span>{sub?.periodEnd?(sub.cancelAtPeriodEnd?`Ends ${formatDate(sub.periodEnd)}`:`Renews ${formatDate(sub.periodEnd)}`):'No active plan'}</span></div>
         <div className="meter" role="meter" aria-label="Runs used" aria-valuemin={0} aria-valuemax={b.plan.runsPerPeriod} aria-valuenow={b.usage.runs}><i style={{width:`${Math.min(100,b.usage.runs/b.plan.runsPerPeriod*100)}%`}}/></div>
-        <dl className="kv"><div><dt>Runs used</dt><dd>{b.usage.runs} / {b.plan.runsPerPeriod}</dd></div><div><dt>Answer checks</dt><dd>{b.usage.checks.toLocaleString()}</dd></div><div><dt>Add-on checks</dt><dd>{b.usage.addonChecks.toLocaleString()}</dd></div></dl>
+        <dl className="kv"><div><dt>Runs used</dt><dd>{b.usage.runs} / {b.plan.runsPerPeriod}</dd></div><div><dt>Answer checks</dt><dd>{b.usage.checks.toLocaleString()} / {b.plan.checksPerPeriod.toLocaleString()}</dd></div><div><dt>Add-on checks</dt><dd>{b.usage.addonChecks.toLocaleString()}</dd></div></dl>
         {sub?.cancelAtPeriodEnd&&<p className="hint">Your plan is set to cancel. You can resume it from the billing portal before {formatDate(sub.periodEnd)}.</p>}
       </section>
     </div>

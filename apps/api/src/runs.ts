@@ -10,7 +10,7 @@ import { createProviders,providerConfigFromEnv,sourceAvailability } from '../../
 import { sendEmail } from '../../../packages/email/src/index';
 import { loadAccountControls,loadGlobalRouting } from './admin';
 import type { AdminDB } from './admin';
-import { all,exec,loadProject,one,planFor,projectQueries } from './app';
+import { all,exec,loadProject,one,periodUsage,planFor,projectQueries } from './app';
 import type { ProjectView } from './app';
 
 /** Runs and the job queue. A run is one job per query × source in run_queries. Workers claim jobs with FOR UPDATE SKIP LOCKED, so
@@ -22,6 +22,13 @@ type Env=Record<string,unknown>&{DB:AdminDB};
 const iso=(ms=Date.now())=>new Date(ms).toISOString();
 const json=<T>(text:unknown,fallback:T):T=>{try{return text?JSON.parse(String(text)) as T:fallback}catch{return fallback}};
 const addMonth=(at:string)=>{const d=new Date(at);d.setUTCMonth(d.getUTCMonth()+1);return d.toISOString()};
+
+/** Platform-wide cap on paid provider calls per calendar month (UTC), across all workspaces: PLATFORM_MONTHLY_CHECK_CAP, default 2,000.
+ * A queued check reserves one call and each retry adds one, so the cap also bounds retries. Mock-provider runs are not metered. */
+export const DEFAULT_PLATFORM_CAP=2000;
+export const platformCap=(env:Record<string,unknown>)=>{const raw=String(env.PLATFORM_MONTHLY_CHECK_CAP??'').trim();const n=Number(raw);return raw&&Number.isInteger(n)&&n>=0?n:DEFAULT_PLATFORM_CAP};
+const monthStart=()=>{const d=new Date();return new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1)).toISOString()};
+export async function platformCalls(db:AdminDB){return (await one<{n:number}>(db,'SELECT COALESCE(SUM(GREATEST(q.attempts,1)),0) n FROM run_queries q JOIN runs r ON r.id=q.run_id WHERE r.metered=1 AND r.created_at>=?',monthStart()))!.n}
 
 /** Multi-row INSERT in chunks, so a 900-job run is a handful of round trips rather than 900. */
 async function insertMany(db:AdminDB,table:string,columns:string[],rows:unknown[][],suffix='',chunk=150){for(let i=0;i<rows.length;i+=chunk){const part=rows.slice(i,i+chunk);await exec(db,`INSERT INTO ${table} (${columns.join(',')}) VALUES ${part.map(()=>`(${columns.map(()=>'?').join(',')})`).join(',')} ${suffix}`,...part.flat())}}
@@ -37,28 +44,32 @@ export async function createRun(db:AdminDB,env:Env,accountId:string,opts:{starte
   const queries=await projectQueries(db,project.id);if(!queries.length)throw new ValidationError('Add at least one query before running.');
   if(queries.length>plan.maxQueries)throw new ValidationError(`Your plan allows up to ${plan.maxQueries} queries. Remove some to run.`);
   const sources=resolveSources({providers:Object.keys(project.selection) as ProviderId[],methods:project.selection});
-  const {available}=await routingFor(db,env,accountId);const off=sources.find(s=>!available[sourceKey(s.provider,s.method)]);
+  const {available,config}=await routingFor(db,env,accountId);const off=sources.find(s=>!available[sourceKey(s.provider,s.method)]);
   if(off)throw new AppError('VALIDATION_ERROR',`${providerNames[off.provider]} (${methodLabels[off.method].label}) is unavailable right now. Turn it off under AI sources to run.`,409);
   const active=await one(db,"SELECT id FROM runs WHERE project_id=? AND status IN ('QUEUED','RUNNING')",project.id);if(active)throw new AppError('VALIDATION_ERROR','A run is already in progress.',409);
   const periodStart=subscription?.periodStart??iso(Date.now()-30*86_400_000);
-  const used=(await one<{n:number}>(db,'SELECT COUNT(*) n FROM runs WHERE account_id=? AND created_at>=?',accountId,periodStart))!.n;
-  if(used>=plan.runsPerPeriod)throw new AppError('QUOTA_EXCEEDED',`Your plan includes ${plan.runsPerPeriod} runs per billing period${subscription?.periodEnd?`; the next period starts ${subscription.periodEnd.slice(0,10)}`:''}.`,409);
+  const used=await periodUsage(db,accountId,periodStart);
+  if(used.runs>=plan.runsPerPeriod)throw new AppError('QUOTA_EXCEEDED',`Your plan includes ${plan.runsPerPeriod} runs per billing period${subscription?.periodEnd?`; the next period starts ${subscription.periodEnd.slice(0,10)}`:''}.`,409);
+  const checks=queries.length*sources.length;
+  if(used.checks+checks>plan.checksPerPeriod)throw new AppError('QUOTA_EXCEEDED',`This run needs ${checks.toLocaleString('en-US')} answer checks, but your workspace has ${Math.max(0,plan.checksPerPeriod-used.checks).toLocaleString('en-US')} of ${plan.checksPerPeriod.toLocaleString('en-US')} left this billing period. Remove some queries or sources, or contact support to raise your limit.`,409);
+  const metered=!config.mock;
+  if(metered){const cap=platformCap(env);const calls=await platformCalls(db);if(calls+checks>cap){console.error(JSON.stringify({level:'error',event:'platform_cap_reached',accountId,calls,checks,cap}));throw new AppError('QUOTA_EXCEEDED','Monitoring is at capacity right now. Please try again later or contact support.',503)}}
   const id=`run_${crypto.randomUUID()}`;const key=opts.idempotencyKey?.slice(0,120)||id;const requestId=opts.requestId??crypto.randomUUID();
-  const created=await one<{id:string}>(db,"INSERT INTO runs (id,account_id,project_id,status,idempotency_key,request_id,created_at,started_by) VALUES (?,?,?,'QUEUED',?,?,?,?) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id",id,accountId,project.id,key,requestId,iso(),opts.startedBy);
+  const created=await one<{id:string}>(db,"INSERT INTO runs (id,account_id,project_id,status,idempotency_key,request_id,created_at,started_by,metered) VALUES (?,?,?,'QUEUED',?,?,?,?,?) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id",id,accountId,project.id,key,requestId,iso(),opts.startedBy,metered?1:0);
   if(!created){const existing=await one<{id:string;account_id:string}>(db,'SELECT id,account_id FROM runs WHERE idempotency_key=?',key);if(!existing||existing.account_id!==accountId)throw new ValidationError('Duplicate request.');return{id:existing.id,checks:0,duplicate:true}}
   const location=JSON.stringify(project.location);
   await insertMany(db,'run_queries',['id','run_id','query_id','query_text','provider_id','method','location','status','attempts'],queries.flatMap(q=>sources.map(s=>[`rq_${crypto.randomUUID()}`,id,q.id,q.text,s.provider,s.method,location,'PENDING',0])));
-  return{id,checks:queries.length*sources.length,duplicate:false};
+  return{id,checks,duplicate:false};
 }
 
 interface Job { id:string; run_id:string; query_id:string; query_text:string; provider_id:ProviderId; method:CollectionMethod; location:string|null; attempts:number }
-interface RunContext { accountId:string; requestId:string; project:ProjectView; monitored:string[]; subscription:{id:string;periodStart:string;periodEnd:string}|null; providers:ReturnType<typeof createProviders>; config:ReturnType<typeof providerConfigFromEnv>; disabled:Set<string> }
+interface RunContext { accountId:string; metered:boolean; requestId:string; project:ProjectView; monitored:string[]; subscription:{id:string;periodStart:string;periodEnd:string}|null; providers:ReturnType<typeof createProviders>; config:ReturnType<typeof providerConfigFromEnv>; disabled:Set<string> }
 
 async function contextFor(db:AdminDB,env:Env,runId:string):Promise<RunContext|null>{
-  const run=await one<{account_id:string;request_id:string}>(db,'SELECT account_id,request_id FROM runs WHERE id=?',runId);if(!run)return null;
+  const run=await one<{account_id:string;request_id:string;metered:number}>(db,'SELECT account_id,request_id,metered FROM runs WHERE id=?',runId);if(!run)return null;
   const project=await loadProject(db,run.account_id);if(!project)return null;
   const {subscriptionId,subscription}=await planFor(db,run.account_id);const {config,disabled}=await routingFor(db,env,run.account_id);
-  return{accountId:run.account_id,requestId:run.request_id,project,monitored:[project.primaryDomain,...project.alternateDomains],subscription:subscriptionId?{id:subscriptionId,periodStart:subscription?.periodStart??iso(),periodEnd:subscription?.periodEnd??iso()}:null,providers:createProviders(config),config,disabled};
+  return{accountId:run.account_id,metered:Boolean(run.metered),requestId:run.request_id,project,monitored:[project.primaryDomain,...project.alternateDomains],subscription:subscriptionId?{id:subscriptionId,periodStart:subscription?.periodStart??iso(),periodEnd:subscription?.periodEnd??iso()}:null,providers:createProviders(config),config,disabled};
 }
 
 /** Claims up to `limit` due jobs (optionally one workspace's), runs them in parallel, records each outcome, then finalizes finished runs. */
@@ -67,11 +78,14 @@ export async function processBatch(db:AdminDB,env:Env,opts:{accountId?:string;li
   await exec(db,"UPDATE run_queries SET status='RETRY',claimed_at=NULL WHERE status='RUNNING' AND claimed_at<?",iso(Date.now()-STALE_MS));
   const scope=opts.accountId?' AND r.account_id=?':'';
   const jobs=await all<Job>(db,`UPDATE run_queries SET status='RUNNING',claimed_at=?,attempts=attempts+1 WHERE id IN (SELECT rq.id FROM run_queries rq JOIN runs r ON r.id=rq.run_id WHERE rq.status IN ('PENDING','RETRY') AND (rq.next_attempt_at IS NULL OR rq.next_attempt_at<=?)${scope} ORDER BY r.created_at,rq.id LIMIT ? FOR UPDATE OF rq SKIP LOCKED) RETURNING id,run_id,query_id,query_text,provider_id,method,location,attempts`,now,now,...(opts.accountId?[opts.accountId]:[]),opts.limit??10);
+  // Retries are the only calls not reserved when a run starts; once the platform cap is passed they fail instead of calling out.
+  const overCap=jobs.some(j=>j.attempts>1)&&await platformCalls(db)>platformCap(env);
   const contexts=new Map<string,Promise<RunContext|null>>();const rates=jobs.length?await all<VendorRate>(db,'SELECT vendor,provider_id provider,method,unit_cost_micros unitCostMicros FROM vendor_rates'):[];
   await Promise.all(jobs.map(async job=>{
     if(!contexts.has(job.run_id))contexts.set(job.run_id,contextFor(db,env,job.run_id).then(async ctx=>{await exec(db,"UPDATE runs SET status='RUNNING' WHERE id=? AND status='QUEUED'",job.run_id);return ctx}));
     const ctx=await contexts.get(job.run_id);
     if(!ctx)return exec(db,"UPDATE run_queries SET status='FAILED',error_code='CONFIGURATION_ERROR',error_message='The project no longer exists.',completed_at=?,claimed_at=NULL WHERE id=?",iso(),job.id);
+    if(overCap&&ctx.metered&&job.attempts>1)return exec(db,"UPDATE run_queries SET status='FAILED',error_code='QUOTA_EXCEEDED',error_message='The monthly provider limit was reached before this check could be retried.',completed_at=?,claimed_at=NULL WHERE id=?",iso(),job.id);
     const key=sourceKey(job.provider_id,job.method);
     const result=await checkSource(ctx.disabled.has(key)?undefined:ctx.providers[key],{query:job.query_text,queryId:job.query_id,providerId:job.provider_id,method:job.method,location:json<Location>(job.location,ctx.project.location),requestId:ctx.requestId,monitored:ctx.monitored,brands:ctx.project.brands},false);
     await recordResult(db,ctx,job,result,rates);

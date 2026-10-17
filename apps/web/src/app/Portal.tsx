@@ -2,6 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import {calculateMetrics} from '../../../../packages/core/src/analytics';
 import type {RunResult} from '../../../../packages/core/src/types';
 import {Logo,RANKINGS_HASH} from '../brand';
+import {MobileBar,useDrawer} from '../MobileBar';
 import {api,auth,errorText,selectAccount} from '../session';
 import type {Me,Project,Run,RunSummary} from '../session';
 import {BillingPage,QueriesPage,ReportsPage,SettingsPage} from './Pages';
@@ -15,19 +16,20 @@ const initials=(s:string)=>s.split(/[\s@.]+/).filter(Boolean).map(w=>w[0]).join(
 /** The signed-in customer portal. Loads the user's workspace (/me) and routes between pages by URL hash (#/overview, …). */
 export default function Portal({page}:{page:Page}){
   const me=useLoad(()=>api<Me>('/me'));
+  const menu=useDrawer(page);
   if(me.error)return <div className="authpage"><Problem error={me.error}/><button onClick={()=>void me.reload()}>Try again</button></div>;
   if(!me.data)return <div className="authpage"><Loading/></div>;
   const m=me.data;
   const signOut=async()=>{await auth.signOut();selectAccount('');navigate('')};
   return <div className="app">
-    <aside><Logo/>
+    <MobileBar {...menu} title={pages.find(([id])=>id===page)?.[1].slice(2)??''}/>
+    <aside id="portal-nav" className={menu.open?'open':''} onClick={e=>{if((e.target as HTMLElement).closest('a'))menu.setOpen(false)}}><Logo/>
       {m.accounts.length>1?<label className="workspace switcher"><span>WORKSPACE</span><select value={m.account.id} onChange={e=>{selectAccount(e.target.value);void me.reload()}}>{m.accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>:<div className="workspace">{m.account.name.toUpperCase()}</div>}
       {pages.map(([id,label])=><a key={id} href={`#/${id}`} className={page===id?'active':'navlink'}>{label}</a>)}
       <a className="sidelink" href={RANKINGS_HASH}>ⓘ How rankings work</a>
       <div className="user">{initials(m.user.name??m.user.email)} <span>{m.user.name??m.user.email}<small>{m.user.email}</small></span></div>
       <button className="ghost small signout" onClick={()=>void signOut()}>Sign out</button>
     </aside>
-    <nav className="mobilenav" aria-label="Portal">{pages.map(([id,label])=><a key={id} href={`#/${id}`} className={page===id?'selected':''}>{label.slice(2)}</a>)}</nav>
     <div className="portal-main">
       {m.paused?<div className="betastrip" role="note"><span>Monitoring is paused for this workspace. Contact support to resume.</span></div>
         :!m.entitled&&page!=='billing'?<div className="betastrip" role="note"><span className="beta-pill">Beta</span><span>{m.subscription?.status==='past_due'?'Your last payment failed. Update your payment method to keep monitoring.':'Choose a plan to start monitoring.'}</span><a href="#/billing">{m.subscription?.status==='past_due'?'Update payment →':'See plan →'}</a></div>:null}

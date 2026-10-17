@@ -66,17 +66,19 @@ portal.use('*',async(c,next)=>{c.set('requestId',c.req.header('x-request-id')??c
 portal.onError((error,c)=>{const status=error instanceof AppError?error.status:500;if(status>=500)console.error(JSON.stringify({level:'error',event:'portal_error',path:c.req.path,message:error.message}));return c.json(errorResponse(error,c.get('requestId')??crypto.randomUUID()),status as 400)});
 
 // --- Plan, subscription and limits ---
-export interface PlanLimits { id:string; name:string; monthlyPrice:number; maxQueries:number; allowedProviders:ProviderId[]; addonUnitPrice:number|null; runsPerPeriod:number }
+export interface PlanLimits { id:string; name:string; monthlyPrice:number; maxQueries:number; allowedProviders:ProviderId[]; addonUnitPrice:number|null; runsPerPeriod:number; checksPerPeriod:number }
 export async function planFor(db:AdminDB,accountId:string){
   const sub=await one<{id:string;plan_id:string;status:string;period_start:string|null;period_end:string|null;cancel_at_period_end:number}>(db,"SELECT id,plan_id,status,period_start,period_end,cancel_at_period_end FROM subscriptions WHERE account_id=? AND stripe_subscription_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1",accountId);
   const planId=sub?.plan_id??'starter';
-  const p=await one<{id:string;name:string;monthly_price:number;max_queries:number;allowed_providers:string;addon_unit_price:number|null;runs_per_period:number}>(db,'SELECT id,name,monthly_price,max_queries,allowed_providers,addon_unit_price,runs_per_period FROM plans WHERE id=?',planId);
+  const p=await one<{id:string;name:string;monthly_price:number;max_queries:number;allowed_providers:string;addon_unit_price:number|null;runs_per_period:number;checks_per_period:number}>(db,'SELECT id,name,monthly_price,max_queries,allowed_providers,addon_unit_price,runs_per_period,checks_per_period FROM plans WHERE id=?',planId);
   if(!p)throw new AppError('CONFIGURATION_ERROR','No plan is configured.',503);
-  const controls=await one<{status:string;max_queries_override:number|null}>(db,'SELECT status,max_queries_override FROM account_controls WHERE account_id=?',accountId);
-  const plan:PlanLimits={id:p.id,name:p.name,monthlyPrice:p.monthly_price,maxQueries:controls?.max_queries_override??p.max_queries,allowedProviders:parseJson(p.allowed_providers,[] as ProviderId[]),addonUnitPrice:p.addon_unit_price,runsPerPeriod:p.runs_per_period};
+  const controls=await one<{status:string;max_queries_override:number|null;max_checks_override:number|null}>(db,'SELECT status,max_queries_override,max_checks_override FROM account_controls WHERE account_id=?',accountId);
+  const plan:PlanLimits={id:p.id,name:p.name,monthlyPrice:p.monthly_price,maxQueries:controls?.max_queries_override??p.max_queries,allowedProviders:parseJson(p.allowed_providers,[] as ProviderId[]),addonUnitPrice:p.addon_unit_price,runsPerPeriod:p.runs_per_period,checksPerPeriod:controls?.max_checks_override??p.checks_per_period};
   const subscription=sub?{status:sub.status,periodStart:sub.period_start,periodEnd:sub.period_end,cancelAtPeriodEnd:Boolean(sub.cancel_at_period_end)}:null;
   return{plan,subscription,subscriptionId:sub?.id??null,entitled:sub?.status==='active'||sub?.status==='trialing',paused:controls?.status==='paused'};
 }
+/** Runs started and answer checks queued since `periodStart`. A check counts once it is queued, so a run can't start that would overrun the cap. */
+export async function periodUsage(db:AdminDB,accountId:string,periodStart:string){const row=await one<{runs:number;checks:number}>(db,'SELECT COUNT(DISTINCT r.id) runs,COUNT(q.id) checks FROM runs r LEFT JOIN run_queries q ON q.run_id=r.id WHERE r.account_id=? AND r.created_at>=?',accountId,periodStart);return{runs:row?.runs??0,checks:row?.checks??0}}
 
 portal.get('/me',async c=>{const {user,account}=c.var;const accounts=await memberships(c.env.DB,user.userId);
   const settings=await one<{notify_run:number;notify_drop:number}>(c.env.DB,'SELECT notify_run,notify_drop FROM accounts WHERE id=?',account.id);
@@ -144,11 +146,11 @@ const requireOwner=(c:PortalContext)=>{if(c.var.account.role!=='owner'&&c.var.ac
 
 portal.get('/billing',async c=>{const db=c.env.DB;const {account}=c.var;const billing=await planFor(db,account.id);
   const periodStart=billing.subscription?.periodStart??new Date(Date.now()-30*86_400_000).toISOString();
-  const usage=await one<{runs:number}>(db,'SELECT COUNT(*) runs FROM runs WHERE account_id=? AND created_at>=?',account.id,periodStart);
-  const checks=await one<{checks:number;addon:number}>(db,'SELECT COALESCE(SUM(units),0) checks,COALESCE(SUM(CASE WHEN addon=1 THEN units ELSE 0 END),0) addon FROM usage_events WHERE account_id=? AND created_at>=?',account.id,periodStart);
+  const usage=await periodUsage(db,account.id,periodStart);
+  const checks=await one<{addon:number}>(db,'SELECT COALESCE(SUM(CASE WHEN addon=1 THEN units ELSE 0 END),0) addon FROM usage_events WHERE account_id=? AND created_at>=?',account.id,periodStart);
   const customer=await one<{stripe_customer_id:string|null}>(db,'SELECT stripe_customer_id FROM accounts WHERE id=?',account.id);
   let invoices:unknown[]=[];if(customer?.stripe_customer_id){try{invoices=await billingGateway(c.env).listInvoices(customer.stripe_customer_id)}catch{invoices=[]}}
-  return c.json({success:true,...billing,usage:{runs:usage?.runs??0,checks:checks?.checks??0,addonChecks:checks?.addon??0},invoices,hasCustomer:Boolean(customer?.stripe_customer_id)})});
+  return c.json({success:true,...billing,usage:{...usage,addonChecks:checks?.addon??0},invoices,hasCustomer:Boolean(customer?.stripe_customer_id)})});
 
 portal.post('/billing/checkout',async c=>{requireOwner(c);const db=c.env.DB;const {plan,entitled}=await planFor(db,c.var.account.id);
   if(entitled)throw new AppError('VALIDATION_ERROR','This workspace already has an active subscription. Use Manage billing to change it.',409);
