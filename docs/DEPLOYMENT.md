@@ -29,6 +29,13 @@ The browser signs in through `/auth/*` on the site's own domain; the API forward
 
 Runs are processed by the portal while it is open, by `/api/internal/worker` (it continues itself in the background while checks remain) and by a daily Vercel Cron (`15 6 * * *`, defined in `scripts/build-vercel.mjs`) that also starts due monthly runs. The worker requires `CRON_SECRET` (set for Production and Preview); Vercel Cron sends it automatically.
 
+### Usage caps
+
+Two limits keep provider spend bounded, and both are checked before a run starts, so a run that would pass either is refused without making any calls:
+
+- **Per workspace:** answer checks per billing period (one check = one query on one source). The plan default is 500 (`plans.checks_per_period`); an operator can set a different limit for one account in the admin site (Accounts → account → Monthly check limit override).
+- **Platform-wide:** paid provider calls per calendar month (UTC) across all workspaces, set by `PLATFORM_MONTHLY_CHECK_CAP` in Production (default 2,000). Retries count too, and stop once the cap is reached. Runs made with `USE_MOCK_SERP_PROVIDERS=true` are not counted, so Preview traffic on the shared database never uses Production's allowance. The admin Overview shows calls used against the cap.
+
 ## Deployment Protection and webhooks
 
 Preview deployments, including `aio-staging.aioverviewhub.com`, sit behind Vercel Authentication. Callers that can't log in, such as Stripe's webhooks, use the project's **Protection Bypass for Automation** secret as the `x-vercel-protection-bypass` query parameter on their URL. That secret is configured in Vercel and Stripe only, never in this repository.

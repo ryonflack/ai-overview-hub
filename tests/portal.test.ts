@@ -84,6 +84,19 @@ describe('portal billing and runs',()=>{let db:TestDB;let stripe:{calls:{method:
     const second=await call('/runs',{method:'POST'});expect(second.status).toBe(409);expect(((await second.json()) as {error:{message:string}}).error.message).toMatch(/1 runs per billing period/);
     await db.raw.run("INSERT INTO account_controls (account_id,status,updated_at) VALUES (?,'paused','2026-01-01')",accountId);expect((await call('/runs',{method:'POST'})).status).toBe(403)});
 
+  it('caps answer checks per workspace, including operator overrides',async()=>{const accountId=await subscribe();await setup();await db.raw.run("INSERT INTO account_controls (account_id,max_checks_override,updated_at) VALUES (?,5,'2026-01-01')",accountId);
+    expect((await (await call('/me')).json() as {plan:{checksPerPeriod:number}}).plan.checksPerPeriod).toBe(5);
+    const res=await call('/runs',{method:'POST'});expect(res.status).toBe(409);expect(((await res.json()) as {error:{message:string}}).error.message).toMatch(/needs 6 answer checks.*5 of 5 left/);
+    await db.raw.run('UPDATE account_controls SET max_checks_override=6');expect((await call('/runs',{method:'POST'})).status).toBe(201);
+    const billing=await (await call('/billing')).json() as {usage:{checks:number}};expect(billing.usage.checks).toBe(6);
+    await db.raw.run("UPDATE plans SET runs_per_period=5");for(let i=0;i<5;i++)await call('/runs/advance',{method:'POST'});expect((await call('/runs',{method:'POST'})).status).toBe(409)});
+
+  it('stops paid runs at the platform monthly cap and does not meter mock runs',async()=>{await subscribe();await setup();expect((await call('/runs',{method:'POST'})).status).toBe(201);expect(await db.raw.get('SELECT metered FROM runs')).toEqual({metered:0});
+    for(let i=0;i<5;i++)await call('/runs/advance',{method:'POST'});
+    await call('/project',{method:'PUT',body:JSON.stringify({primaryDomain:'example.com',selection:{chatgpt:['api']}})});
+    const res=await call('/runs',{method:'POST'},{USE_MOCK_SERP_PROVIDERS:'false',OPENAI_API_KEY:'sk-test',PLATFORM_MONTHLY_CHECK_CAP:'1'});expect(res.status).toBe(503);expect(((await res.json()) as {error:{message:string}}).error.message).toMatch(/at capacity/);
+    expect(await db.raw.get('SELECT COUNT(*) n FROM runs')).toEqual({n:1})});
+
   it('refuses sources the operator has not configured',async()=>{await subscribe();await setup();const res=await call('/runs',{method:'POST'},{USE_MOCK_SERP_PROVIDERS:'false'});expect(res.status).toBe(409);expect(((await res.json()) as {error:{message:string}}).error.message).toMatch(/unavailable right now/)});
 
   it('keeps runs going from the protected background worker and emails owners when done',async()=>{await subscribe();await setup();await db.raw.run("UPDATE plans SET runs_per_period=5");

@@ -12,6 +12,7 @@ export function Overview({range,onUnauthorized,go}:{range:Range;onUnauthorized:(
       <StatTile label="Revenue in period" value={cents(data.revenueCents)} sub={`incl. ${cents(b.addonRevenueCents)} add-ons`}/>
       <StatTile label="Vendor cost in period" value={micros(data.costMicros)} sub={`${num(data.checks)} checks`}/>
       <StatTile label="Gross margin" value={pct(data.grossMarginRate)} status={data.grossMarginRate===null?undefined:data.grossMarginRate<0.5?'warning':'good'} sub={data.grossMarginRate===null?'no revenue yet':'revenue less vendor cost'}/>
+      <StatTile label="Provider calls this month" value={`${num(data.platformChecks.used)} / ${num(data.platformChecks.cap)}`} status={data.platformChecks.used>=data.platformChecks.cap?'critical':data.platformChecks.used>=data.platformChecks.cap*0.8?'warning':'good'} sub="platform cap (PLATFORM_MONTHLY_CHECK_CAP)"/>
     </div>
     <div className="grid2">
       <Panel title="Needs attention">
