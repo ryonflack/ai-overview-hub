@@ -5,7 +5,7 @@ import { providerIds,providerNames } from '../../../packages/core/src/types';
 import type { CollectionMethod,ProviderId } from '../../../packages/core/src/types';
 import { providerConfigFromEnv,sourceAvailability } from '../../../packages/providers/src/index';
 import { applyRouting,maskAvailability } from '../../../packages/admin/src/routing';
-import { verifyStripeWebhook } from '../../../packages/billing/src/stripe';
+import { stripeSecretKey,verifyStripeWebhook } from '../../../packages/billing/src/stripe';
 import { applyStripeEvent } from '../../../packages/billing/src/webhooks';
 import { sha256Hex } from '../../../packages/admin/src/auth';
 import { neonAuthBaseUrl } from '../../../packages/auth/src/index';
@@ -24,8 +24,6 @@ app.post('/api/quote',async c=>{const requestId=c.req.header('x-request-id')!;tr
 app.post('/api/runs',async c=>{const requestId=c.req.header('x-request-id')!;try{const body=await c.req.json<{projectId:string;idempotencyKey:string}>();if(!body.projectId||!body.idempotencyKey)throw new AppError('VALIDATION_ERROR','Project and idempotency key are required.',400);await c.env.QUEUE.send({type:'RUN_CREATED',...body,requestId});return c.json({success:true,status:'QUEUED',requestId},202)}catch(error){return c.json(errorResponse(error,requestId),400)}});
 // Stripe webhooks are the only source of subscription state. The raw body is verified against the endpoint's signing secret before anything is written.
 app.post('/api/stripe/webhook',async c=>{const requestId=c.req.header('x-request-id')!;if(!c.env.STRIPE_WEBHOOK_SECRET)return c.json(errorResponse(new AppError('CONFIGURATION_ERROR','Billing is not configured.',503),requestId),503);try{const payload=await c.req.text();const event=await verifyStripeWebhook(payload,c.req.header('stripe-signature')??'',c.env.STRIPE_WEBHOOK_SECRET);return c.json({received:true,outcome:await applyStripeEvent(c.env.DB,event,await sha256Hex(payload))})}catch(error){const status=error instanceof AppError&&error.code==='BILLING_ERROR'?400:500;return c.json(errorResponse(error,requestId),status)}});
-/** The Stripe secret key (sk_test_/sk_live_). Vercel holds it as STRIPE_API_SECRET; STRIPE_SECRET_KEY is accepted too. */
-export const stripeSecretKey=(env:Env)=>env.STRIPE_API_SECRET||env.STRIPE_SECRET_KEY||'';
 // Which Stripe mode this deployment is in, without exposing any value: lets each environment be checked after its variables change.
 app.get('/api/health/billing',c=>{const key=stripeSecretKey(c.env);const mode=/^(sk|rk)_live_/.test(key)?'live':/^(sk|rk)_test_/.test(key)?'test':key?'unrecognized':'missing';return c.json({status:mode==='missing'||!c.env.STRIPE_WEBHOOK_SECRET||!c.env.STRIPE_PRICE_ID?'unconfigured':'ok',stripeMode:mode,webhookSecret:Boolean(c.env.STRIPE_WEBHOOK_SECRET),priceId:Boolean(c.env.STRIPE_PRICE_ID)})});
 // Sign-in readiness: the Neon Auth URL is configured and its public keys can be fetched (no values are exposed).
@@ -41,6 +39,17 @@ app.all('/auth/*',async c=>{const base=neonAuthBaseUrl(c.env);if(!base)return c.
   // Cookies become first-party: drop any Domain attribute so the browser scopes them to this host.
   for(const cookie of upstream.headers.getSetCookie())out.append('set-cookie',cookie.replace(/;\s*Domain=[^;]*/gi,''));
   out.set('cache-control','no-store');return new Response(method==='HEAD'?null:await upstream.arrayBuffer(),{status:upstream.status,headers:out})});
+/** Background worker: Vercel Cron (daily, GET) and the self-chaining kick (POST), both with `Authorization: Bearer CRON_SECRET`.
+ * Works through queued checks for up to ~40 seconds, then hands off to a fresh invocation if any remain. */
+app.all('/api/internal/worker',async c=>{const secret=String(c.env.CRON_SECRET||'');if(!secret||c.req.header('authorization')!==`Bearer ${secret}`)return c.json(errorResponse(new AppError('AUTHENTICATION_ERROR','Unauthorized.',401),c.req.header('x-request-id')!),401);
+  const {processBatch,scheduleDueRuns}=await import('./runs');const origin=new URL(c.req.url).origin;
+  const work=async()=>{const started=Date.now();const scheduled=c.req.method==='GET'?await scheduleDueRuns(c.env.DB,c.env):0;
+    let processed=0,finished=0,remaining:number;do{const r=await processBatch(c.env.DB,c.env,{limit:10});processed+=r.processed;finished+=r.finished;remaining=r.remaining;if(!r.processed)break}while(Date.now()-started<40_000);
+    if(remaining>0)(c.env.KICK_WORKER as ((origin:string)=>void)|undefined)?.(origin);return{scheduled,processed,finished,remaining}};
+  // A kick (POST) is acknowledged at once and the work continues after the response, so the caller never waits on it.
+  const background=c.env.WAIT_UNTIL as ((p:Promise<unknown>)=>void)|undefined;
+  if(c.req.method==='POST'&&background){background(work().catch(error=>console.error(JSON.stringify({level:'error',event:'worker_failed',message:String(error)}))));return c.json({success:true,accepted:true},202)}
+  return c.json({success:true,...await work()})});
 app.route('/api/app',portal);
 app.route('/api/admin',admin);
 app.onError((error,c)=>c.json(errorResponse(error,c.req.header('x-request-id')??crypto.randomUUID()),500));

@@ -8,6 +8,7 @@ import { providerIds,providerNames } from '../../../packages/core/src/types';
 import type { CollectionMethod,Location,ProviderId } from '../../../packages/core/src/types';
 import { neonAuthBaseUrl,verifyNeonToken } from '../../../packages/auth/src/index';
 import type { NeonUser } from '../../../packages/auth/src/index';
+import { billingGateway } from '../../../packages/billing/src/stripe';
 import type { AdminDB } from './admin';
 
 /** Customer portal API, served at /api/app. Every route needs a Neon Auth JWT (Authorization: Bearer) and acts on one account the
@@ -131,5 +132,43 @@ portal.post('/queries',async c=>{const input=await body<{text?:string;tag?:strin
   await exec(db,'INSERT INTO project_queries (project_id,query_id,active) VALUES (?,?,1)',project.id,id);
   return c.json({success:true,query:{id,text,tag}},201)});
 portal.delete('/queries/:id',async c=>{const project=await requireProject(c);await exec(c.env.DB,'UPDATE project_queries SET active=0 WHERE project_id=? AND query_id=?',project.id,c.req.param('id'));return c.json({success:true})});
+
+// --- Billing (Stripe Checkout and Customer Portal; the webhook is the source of truth for the subscription) ---
+const origin=(c:PortalContext)=>new URL(c.req.url).origin;
+async function stripeCustomer(c:PortalContext){const db=c.env.DB;const {account,user}=c.var;
+  const row=await one<{stripe_customer_id:string|null}>(db,'SELECT stripe_customer_id FROM accounts WHERE id=?',account.id);if(row?.stripe_customer_id)return row.stripe_customer_id;
+  const id=await billingGateway(c.env).createCustomer({accountId:account.id,email:user.email,name:account.name});
+  await exec(db,'UPDATE accounts SET stripe_customer_id=? WHERE id=? AND stripe_customer_id IS NULL',id,account.id);
+  return (await one<{stripe_customer_id:string}>(db,'SELECT stripe_customer_id FROM accounts WHERE id=?',account.id))!.stripe_customer_id}
+const requireOwner=(c:PortalContext)=>{if(c.var.account.role!=='owner'&&c.var.account.role!=='admin')throw new AppError('AUTHORIZATION_ERROR','Only workspace owners can manage billing.',403)};
+
+portal.get('/billing',async c=>{const db=c.env.DB;const {account}=c.var;const billing=await planFor(db,account.id);
+  const periodStart=billing.subscription?.periodStart??new Date(Date.now()-30*86_400_000).toISOString();
+  const usage=await one<{runs:number}>(db,'SELECT COUNT(*) runs FROM runs WHERE account_id=? AND created_at>=?',account.id,periodStart);
+  const checks=await one<{checks:number;addon:number}>(db,'SELECT COALESCE(SUM(units),0) checks,COALESCE(SUM(CASE WHEN addon=1 THEN units ELSE 0 END),0) addon FROM usage_events WHERE account_id=? AND created_at>=?',account.id,periodStart);
+  const customer=await one<{stripe_customer_id:string|null}>(db,'SELECT stripe_customer_id FROM accounts WHERE id=?',account.id);
+  let invoices:unknown[]=[];if(customer?.stripe_customer_id){try{invoices=await billingGateway(c.env).listInvoices(customer.stripe_customer_id)}catch{invoices=[]}}
+  return c.json({success:true,...billing,usage:{runs:usage?.runs??0,checks:checks?.checks??0,addonChecks:checks?.addon??0},invoices,hasCustomer:Boolean(customer?.stripe_customer_id)})});
+
+portal.post('/billing/checkout',async c=>{requireOwner(c);const db=c.env.DB;const {plan,entitled}=await planFor(db,c.var.account.id);
+  if(entitled)throw new AppError('VALIDATION_ERROR','This workspace already has an active subscription. Use Manage billing to change it.',409);
+  const priceId=String(c.env.STRIPE_PRICE_ID||'');if(!priceId)throw new AppError('CONFIGURATION_ERROR','Billing is not configured.',503);
+  const gateway=billingGateway(c.env);const customerId=await stripeCustomer(c);const automaticTax=await gateway.taxActive().catch(()=>false);
+  const url=await gateway.createCheckout({accountId:c.var.account.id,customerId,priceId,planId:plan.id,successUrl:`${origin(c)}/#/billing?checkout=success`,cancelUrl:`${origin(c)}/#/billing`,automaticTax});
+  return c.json({success:true,url})});
+
+portal.post('/billing/portal',async c=>{requireOwner(c);const customer=await one<{stripe_customer_id:string|null}>(c.env.DB,'SELECT stripe_customer_id FROM accounts WHERE id=?',c.var.account.id);
+  if(!customer?.stripe_customer_id)throw new AppError('VALIDATION_ERROR','There is no billing account yet. Subscribe first.',409);
+  return c.json({success:true,url:await billingGateway(c.env).createPortal(customer.stripe_customer_id,`${origin(c)}/#/billing`)})});
+
+// --- Runs ---
+portal.get('/runs',async c=>{const {runSummaries}=await import('./runs');return c.json({success:true,runs:await runSummaries(c.env.DB,c.var.account.id)})});
+portal.get('/runs/:id',async c=>{const {loadRun}=await import('./runs');const run=await loadRun(c.env.DB,c.var.account.id,c.req.param('id'));if(!run)throw new AppError('VALIDATION_ERROR','Run not found.',404);return c.json({success:true,run})});
+portal.post('/runs',async c=>{const {createRun,processBatch}=await import('./runs');const input=await c.req.json<{idempotencyKey?:string}>().catch(()=>({} as {idempotencyKey?:string}));
+  const run=await createRun(c.env.DB,c.env,c.var.account.id,{startedBy:'manual',idempotencyKey:input.idempotencyKey,requestId:c.var.requestId});
+  // Start immediately; the portal keeps the run moving by calling /advance while it is open, and the internal worker continues it in the background.
+  const progress=await processBatch(c.env.DB,c.env,{accountId:c.var.account.id,limit:10});const kick=c.env.KICK_WORKER as ((origin:string)=>void)|undefined;kick?.(origin(c));
+  return c.json({success:true,run:{id:run.id,checks:run.checks},progress},201)});
+portal.post('/runs/advance',async c=>{const {processBatch}=await import('./runs');return c.json({success:true,progress:await processBatch(c.env.DB,c.env,{accountId:c.var.account.id,limit:10})})});
 
 export default portal;

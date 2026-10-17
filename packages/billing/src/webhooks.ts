@@ -31,9 +31,9 @@ async function applySubscription(db:BillingDB,sub:Stripe.Subscription,eventCreat
   const customerId=typeof sub.customer==='string'?sub.customer:sub.customer.id;
   // canceled_at is when the subscription stopped (churn), not when cancellation was requested for the period end.
   const endedAt=iso(sub.ended_at)??(sub.status==='canceled'?iso(sub.canceled_at):null);
-  await db.prepare(`INSERT INTO subscriptions (id,account_id,plan_id,stripe_customer_id,stripe_subscription_id,status,period_start,period_end,created_at,canceled_at,stripe_event_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(stripe_subscription_id) DO UPDATE SET plan_id=excluded.plan_id,stripe_customer_id=excluded.stripe_customer_id,status=excluded.status,period_start=excluded.period_start,period_end=excluded.period_end,created_at=excluded.created_at,canceled_at=excluded.canceled_at,stripe_event_at=excluded.stripe_event_at,updated_at=excluded.updated_at
+  await db.prepare(`INSERT INTO subscriptions (id,account_id,plan_id,stripe_customer_id,stripe_subscription_id,status,period_start,period_end,created_at,canceled_at,cancel_at_period_end,stripe_event_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(stripe_subscription_id) DO UPDATE SET plan_id=excluded.plan_id,stripe_customer_id=excluded.stripe_customer_id,status=excluded.status,period_start=excluded.period_start,period_end=excluded.period_end,created_at=excluded.created_at,canceled_at=excluded.canceled_at,cancel_at_period_end=excluded.cancel_at_period_end,stripe_event_at=excluded.stripe_event_at,updated_at=excluded.updated_at
     WHERE excluded.stripe_event_at>=COALESCE(subscriptions.stripe_event_at,0)`)
-    .bind(crypto.randomUUID(),accountId,planId,customerId,sub.id,sub.status,iso(item?.current_period_start),iso(item?.current_period_end),iso(sub.created),endedAt,eventCreated,now).run();
+    .bind(crypto.randomUUID(),accountId,planId,customerId,sub.id,sub.status,iso(item?.current_period_start),iso(item?.current_period_end),iso(sub.created),endedAt,sub.cancel_at_period_end||sub.cancel_at?1:0,eventCreated,now).run();
   return 'applied';
 }

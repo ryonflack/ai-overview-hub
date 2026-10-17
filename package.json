@@ -23,11 +23,12 @@
     "demo:accounts": "node scripts/seed-demo-accounts.mjs"
   },
   "dependencies": {
-    "@neondatabase/neon-js": "^0.8.0-beta",
+    "@neondatabase/neon-js": "latest",
     "@neondatabase/serverless": "latest",
+    "@vercel/functions": "latest",
     "@vitejs/plugin-react": "latest",
     "hono": "latest",
-    "jose": "^6.2.12",
+    "jose": "latest",
     "jszip": "latest",
     "papaparse": "latest",
     "react": "latest",

@@ -18,9 +18,10 @@ if(import.meta.url===`file://${process.argv[1]}`){
   const fn=`${out}/functions/api.func`;
   mkdirSync(fn,{recursive:true});
   await bundleApi('apps/api/src/vercel.ts',`${fn}/index.mjs`);
-  writeFileSync(`${fn}/.vc-config.json`,JSON.stringify({runtime:'nodejs22.x',handler:'index.mjs',launcherType:'Nodejs',maxDuration:30},null,2));
+  writeFileSync(`${fn}/.vc-config.json`,JSON.stringify({runtime:'nodejs22.x',handler:'index.mjs',launcherType:'Nodejs',maxDuration:60},null,2));
   // /auth/* (customer sign-in, forwarded to Neon Auth by the API so its cookie is first-party) runs on the same function.
   const routes=[{src:'^/(?:api|auth)(?:/.*)?$',dest:'/api'},{handle:'filesystem'}];
-  writeFileSync(`${out}/config.json`,JSON.stringify({version:3,routes},null,2));
+  // Daily: start due monthly runs and pick up any queued checks (the worker also chains itself while work remains).
+  writeFileSync(`${out}/config.json`,JSON.stringify({version:3,routes,crons:[{path:'/api/internal/worker',schedule:'15 6 * * *'}]},null,2));
   console.log('Vercel build output written to .vercel/output (static site + api function).');
 }
