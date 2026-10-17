@@ -31,11 +31,14 @@ _Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 - The site is labelled **Beta** everywhere: a banner on the marketing site ("Try it risk-free: no contract, cancel anytime"), a Beta pill on the logo, and a beta strip inside the portal.
 - **How our rankings work** (`apps/web/src/Methodology.tsx`, at `/#how-rankings-work`) is linked from the footer, the beta banner and the portal sidebar. It explains the process and metric definitions at a high level and deliberately names no vendors or collection infrastructure. Keep it that way when editing.
 
-### Customer portal (`apps/web`): screens only, not functional yet
-- Every menu item is a working screen on example data (`apps/web/src/Portal.tsx`): Overview, Projects, AI sources, Queries (add, filter, remove; capped at 100), Reports (real XLSX / CSV-zip downloads generated in the browser from a demo run via `packages/reporting`, loaded lazily), Billing (plan, usage, invoices) and Settings (profile, brand names and alternate domains, schedule, email notifications). Mobile has a scrolling tab bar.
-- **Demo customer accounts.** Four fictional customers (Northwind CRM, Bluefin Outdoor, Harbor & Pine Legal, Sola Dental Group) live in `packages/core/src/demo-accounts.json`, with different industries, countries, AI sources and run histories. The portal's sidebar switcher (a dropdown on mobile) moves between them, and every screen, including the overview metrics and report downloads, is generated from that account's data. Domains and emails use the reserved `.example` domain.
-- **Seeding the demo accounts into the database:** `npm run demo:accounts > demo.sql`, then `psql "$DATABASE_URL" -f demo.sql` (or paste it into the Neon SQL editor). Add `-- --owner you@yourdomain.com` to make yourself an owner of every demo account, ready for when customer login exists. `-- --remove` prints SQL that deletes them all. Demo subscriptions use status `demo`, so the admin panel lists them but leaves them out of MRR. The seed adds accounts, owners, projects, domains and queries, not run history.
-- **Not done yet:** there's no customer login, and queries, sources and settings save only in the browser (`localStorage`), not to the server. "New project" and "Manage payment & cancel" are disabled until the projects API and the Stripe Customer Portal are wired up.
+### Customer portal (`apps/web`): live (2026-10-17)
+- **Sign-in** is Neon Auth (managed Better Auth): create account, sign in, and password reset by emailed code (`apps/web/src/app/Login.tsx`). The browser talks to Neon through `/auth/*` on our own domain, forwarded by the API (`apps/api/src/index.ts`), so the session cookie is first-party and works in Safari. The API verifies Neon's short-lived EdDSA JWTs (`packages/auth`). A user's first request creates their workspace; an existing users row (for example the demo owner) is claimed by email only once Neon has verified that email.
+- **Portal pages** (`apps/web/src/app/`, routes `#/overview`, `#/project`, `#/queries`, `#/reports`, `#/billing`, `#/settings`) all use real data from `/api/app/*` (`apps/api/src/app.ts`): project and AI-source setup with a live per-run estimate, queries (capped by plan, with operator overrides), runs with live progress, metrics, coverage, movement and top cited domains, reports with XLSX/CSV downloads built in the browser, billing (Stripe Checkout, Customer Portal, usage, invoices) and settings (name, workspace, notifications). One project per workspace during the beta. Workspace switcher when a user belongs to several.
+- **Runs** (`apps/api/src/runs.ts`): one job per query × source in `run_queries`, claimed with `FOR UPDATE SKIP LOCKED` by the portal while it is open, by the self-chaining `/api/internal/worker` (protected by `CRON_SECRET`) and by a daily Vercel Cron that also starts due monthly runs. Recoverable failures retry with backoff (3 attempts); abandoned claims are reclaimed after 2 minutes. Results, citations, vendor cost and usage (with the add-on flag) are recorded. Limits: an active or trialing subscription, `plans.runs_per_period` (default 4), the query cap, paused workspaces, and sources that are unavailable are refused before a run starts.
+- **Email** (`packages/email`): Resend when `RESEND_API_KEY` is set (from `EMAIL_FROM`), otherwise logged. Run-complete and visibility-drop (>5 points) emails go to workspace owners.
+- **Demo workspace** stays at `#/demo` (fictional accounts in `packages/core/src/demo-accounts.json`; seed with `npm run demo:accounts`, see below), and the marketing preview still uses it.
+- **Seeding the demo accounts into the database:** `npm run demo:accounts > demo.sql`, then `psql "$DATABASE_URL" -f demo.sql` (or paste it into the Neon SQL editor). `-- --owner you@yourdomain.com` makes you an owner of every demo account; sign in with that (verified) email to see them. `-- --remove` deletes them all.
+- **Verified end to end on the preview deployment** with a real browser: sign-up, project, queries, Stripe Checkout page, webhook-activated plan, a run, reports download, settings and the Stripe billing portal. Checkout's card submission itself is blocked for automated browsers by Stripe's hCaptcha, so that one step was completed through the Stripe API in the test.
 
 ### Quality
 - 44 automated tests cover providers, routing, locations, quoting, the API endpoints and exports. Lint, typecheck (now including the API app) and the build pass.
@@ -44,20 +47,23 @@ _Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 ## Moved to Vercel + Neon (2026-10-17)
 - The API now runs as a Vercel Function on the `ai-overview-hub-public` project, next to the site, under `/api` (`apps/api/src/vercel.ts`, bundled by `scripts/build-vercel.mjs`). The Cloudflare Workers setup (`wrangler.toml`, D1, Queues) is gone; it had never been provisioned.
 - The database is Neon Postgres. Migrations were ported to PostgreSQL and are applied by every Vercel build (`scripts/migrate.mjs`). `packages/db` keeps the API's `prepare().bind()` interface. Tests and `npm run dev:api` run on an in-process PostgreSQL (PGlite), so they exercise the real dialect.
-- The queue is the `queue_messages` table (migration `0006_job_queue.sql`). There is still no consumer; it should claim rows with `FOR UPDATE SKIP LOCKED`, triggered by Vercel Cron.
+- Runs use `run_queries` as their job queue (see Customer portal). `queue_messages` (migration `0006`) receives the legacy `POST /api/runs` and admin retry messages and has no consumer yet.
 - **Production and Preview share one Neon database** (the integration's variables target both). Previews and staging therefore read and write production data, and every preview build migrates it. Enable Neon's per-preview branching in the integration before real customers arrive.
-- Not ported yet: object storage for reports (was R2; use Vercel Blob) and the daily cron (no handler existed).
+- Reports are generated in the browser from run data, so no object storage is needed yet.
 
 ## Stripe (sandbox configured 2026-10-17)
 - Sandbox account set up: product, $69.99/month price (lookup key `starter_monthly`), Customer Portal, and a webhook endpoint pointing at staging. Vercel's Preview environment holds the sandbox values; Production is for live. IDs and the go-live table are in `docs/BILLING.md`.
 - `POST /api/stripe/webhook` records subscriptions from Stripe events and logs each one in `webhook_events` (migration `0005_stripe_webhooks.sql`, tests in `tests/billing.test.ts`). Checkout now tags subscriptions with the account and requires a billing address and accepts tax IDs.
-- Not done: checkout and portal endpoints for customers (they need customer login), the add-on metered price (`addon_unit_price` undecided), the Stripe Tax head office address and registrations, and live mode.
+- The sandbox account has **Managed Payments** on by default: Stripe (through Link) is the merchant of record and handles sales tax, so Checkout omits its own tax options unless Stripe Tax is active. Confirm this is intended before going live (it changes fees and who sells to the customer).
+- Not done: the add-on metered price (`addon_unit_price` undecided) and live mode.
 
-## Next: customer portal (make it real)
-1. **Customer login.** Email-verified accounts, secure session cookies, Turnstile on sign-up and login (see `docs/SECURITY.md`).
-2. **Projects API, scoped to each account.** Create and edit projects, domains and queries. Save AI-source selections and location to `projects.source_methods` / `projects.location`, replacing the browser-only save.
-3. **Run execution.** A queue consumer that loads the project, calls `executeRun` with `createProviders(providerConfigFromEnv(env))`, stores `run_queries` / `provider_results` / `citations`, and writes `usage_events` with `method` and `addon`.
-4. **Reports, history and billing pages** connected to real data, using Stripe Checkout and the Customer Portal.
+## Next
+1. **Neon Auth trusted domains:** add `https://aio-staging.aioverviewhub.com` and `https://www.aioverviewhub.com` in the Neon Console (Auth → Configuration → Domains). Until then sign-in on those sites fails with "Invalid origin" (localhost is trusted by default).
+2. **Resend:** create an account, verify `aioverviewhub.com`, and set `RESEND_API_KEY` (and optionally `EMAIL_FROM`) in Vercel.
+3. **Provider keys** (`SERPAPI_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, Oxylabs/DataForSEO). Preview uses `USE_MOCK_SERP_PROVIDERS=true` (sample answers) until keys are added there.
+4. **Separate staging data:** turn on Neon's per-preview branching; today staging and production share one database.
+5. **Go live:** live Stripe product, price, webhook and portal, Production variables, merge to `main`.
+6. Later: Turnstile on sign-up, more than one project per workspace, the add-on metered price.
 
 ## Admin control panel (for the operator): first version built
 See `docs/ADMIN.md` for pages, cost model, security and setup.
