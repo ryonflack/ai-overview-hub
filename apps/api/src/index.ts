@@ -30,6 +30,17 @@ export const stripeSecretKey=(env:Env)=>env.STRIPE_API_SECRET||env.STRIPE_SECRET
 app.get('/api/health/billing',c=>{const key=stripeSecretKey(c.env);const mode=/^(sk|rk)_live_/.test(key)?'live':/^(sk|rk)_test_/.test(key)?'test':key?'unrecognized':'missing';return c.json({status:mode==='missing'||!c.env.STRIPE_WEBHOOK_SECRET||!c.env.STRIPE_PRICE_ID?'unconfigured':'ok',stripeMode:mode,webhookSecret:Boolean(c.env.STRIPE_WEBHOOK_SECRET),priceId:Boolean(c.env.STRIPE_PRICE_ID)})});
 // Sign-in readiness: the Neon Auth URL is configured and its public keys can be fetched (no values are exposed).
 app.get('/api/health/auth',async c=>{const base=neonAuthBaseUrl(c.env);if(!base)return c.json({status:'unconfigured'},503);try{const r=await fetch(`${base}/.well-known/jwks.json`,{signal:AbortSignal.timeout(5000)});const keys=r.ok?((await r.json()) as {keys?:unknown[]}).keys?.length??0:0;return c.json({status:keys?'ok':'unavailable',keys},keys?200:503)}catch{return c.json({status:'unavailable'},503)}});
+/** Customer sign-in on our own domain: /auth/* is forwarded to Neon Auth so its session cookie is first-party (Safari blocks the
+ * third-party cookie it would otherwise be). Neon checks the Host header, so this is a server-side fetch rather than a CDN rewrite. */
+const forwardHeaders=['content-type','cookie','origin','referer','user-agent','accept','accept-language','x-neon-client-info'];
+app.all('/auth/*',async c=>{const base=neonAuthBaseUrl(c.env);if(!base)return c.json(errorResponse(new AppError('CONFIGURATION_ERROR','Sign-in is not configured.',503),c.req.header('x-request-id')!),503);
+  const url=new URL(c.req.url);const target=`${base}${url.pathname.slice('/auth'.length)}${url.search}`;
+  const headers=new Headers();for(const name of forwardHeaders){const v=c.req.header(name);if(v)headers.set(name,v)}
+  const method=c.req.method;const upstream=await fetch(target,{method,headers,body:method==='GET'||method==='HEAD'?undefined:await c.req.arrayBuffer(),redirect:'manual'});
+  const out=new Headers();for(const [k,v] of upstream.headers)if(!['set-cookie','content-encoding','content-length','transfer-encoding','connection'].includes(k))out.set(k,v);
+  // Cookies become first-party: drop any Domain attribute so the browser scopes them to this host.
+  for(const cookie of upstream.headers.getSetCookie())out.append('set-cookie',cookie.replace(/;\s*Domain=[^;]*/gi,''));
+  out.set('cache-control','no-store');return new Response(method==='HEAD'?null:await upstream.arrayBuffer(),{status:upstream.status,headers:out})});
 app.route('/api/app',portal);
 app.route('/api/admin',admin);
 app.onError((error,c)=>c.json(errorResponse(error,c.req.header('x-request-id')??crypto.randomUUID()),500));
