@@ -58,12 +58,12 @@ _Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 - Not done: the add-on metered price (`addon_unit_price` undecided) and live mode.
 
 ## Next
-1. **Neon Auth trusted domains:** add `https://aio-staging.aioverviewhub.com` and `https://www.aioverviewhub.com` in the Neon Console (Auth → Configuration → Domains). Until then sign-in on those sites fails with "Invalid origin" (localhost is trusted by default).
-2. **Resend:** create an account, verify `aioverviewhub.com`, and set `RESEND_API_KEY` (and optionally `EMAIL_FROM`) in Vercel.
-3. **Provider keys** (`SERPAPI_API_KEY`, `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, Oxylabs/DataForSEO). Preview uses `USE_MOCK_SERP_PROVIDERS=true` (sample answers) until keys are added there.
-4. **Separate staging data:** turn on Neon's per-preview branching; today staging and production share one database.
-5. **Go live:** live Stripe product, price, webhook and portal, Production variables, merge to `main`.
-6. Later: Turnstile on sign-up, more than one project per workspace, the add-on metered price.
+1. **Go live with Stripe** (launch day): live product, price, webhook and Production `STRIPE_*` variables; see the checklist below.
+2. **Company email** (before launch): Google Workspace on `aioverviewhub.com` with one user and the aliases `support@`, `hello@`, `billing@` and `notifications@`, so these addresses can send and receive. Steps: verify the domain in Cloudflare DNS; turn off Cloudflare Email Routing and add MX `smtp.google.com` (priority 1); change the root SPF to `v=spf1 include:_spf.google.com ~all`; turn on Google DKIM (`google._domainkey`) before sending, since DMARC is `p=quarantine`. Leave Resend's `send.` and `resend._domainkey` records alone. Then set `support@` as reply-to on app emails and the Resend templates (`aioh-*`).
+3. **Separate staging data:** turn on Neon's per-preview branching; today staging and production share one database.
+4. Later: move OpenAI, Resend, SerpApi, Perplexity and Google Voice to company-owned accounts; Turnstile on sign-up; more than one project per workspace; the add-on metered price.
+
+Done since: Neon Auth trusted domains, Resend (domain verified, `RESEND_API_KEY` set, lifecycle emails), provider keys, usage caps, Google Tag Manager (`GTM-PNVSKJTR` in `apps/web/index.html`).
 
 ## Admin control panel (for the operator): first version built
 See `docs/ADMIN.md` for pages, cost model, security and setup.
@@ -91,6 +91,7 @@ See `docs/ADMIN.md` for pages, cost model, security and setup.
   - Confirm `OPENAI_MODEL` (default `gpt-5-mini`) is still a current model.
   - Decide whether ChatGPT API answers should always search (`tool_choice: "required"`).
 - Set `plans.addon_unit_price` and create the matching Stripe metered price.
+- Company email addresses (`support@`, `hello@`, `billing@`, `notifications@`) send and receive; see Next, item 2.
 - Stripe live mode: follow the table in `docs/BILLING.md` (product, price, webhook endpoint, portal, Tax head office and registrations), then set the live `STRIPE_*` secrets.
 - Migrations apply automatically on each Vercel build; confirm `schema_migrations` lists `0001` to `0006` in production.
 - Admin panel: set `ADMIN_TOTP_KEY`, `ADMIN_URL`, `ADMIN_ORIGIN`, the `VERCEL_*` read token and project IDs, create the first operator, and enter vendor cost rates.
