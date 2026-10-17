@@ -18,7 +18,7 @@ Stripe variables use the same names in every Vercel environment with different v
 
 | | Sandbox → Vercel Preview (done) | Live → Vercel Production (to do at launch) |
 |---|---|---|
-| `STRIPE_SECRET_KEY` | **Not set yet**: the existing variable is empty. Add the sandbox secret key (`sk_test_…`) for Preview. Webhooks work without it; Checkout and the portal need it | Live secret key (`sk_live_…`) |
+| `STRIPE_API_SECRET` (secret key; `STRIPE_SECRET_KEY` also accepted) | Sandbox secret key (`sk_test_…`). Webhooks work without it; Checkout and the portal need it | Live secret key (`sk_live_…`) |
 | `STRIPE_PRICE_ID` | `price_1UCrISDWX9gitE6lIpXnp9xS`: $69.99/month, tax exclusive, lookup key `starter_monthly`, metadata `plan_id=starter` | Create the same price in live mode |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret of `we_1URLhyDWX9gitE6lE0YzMfMP` | Signing secret of the live endpoint |
 | Webhook endpoint | `https://aio-staging.aioverviewhub.com/api/stripe/webhook`, with the Vercel automation-bypass query parameter (staging is behind Vercel Authentication); API version `2026-08-26.dahlia` (matches the `stripe` SDK); the three subscription events | `https://www.aioverviewhub.com/api/stripe/webhook`, same version and events, no bypass needed |
