@@ -5,7 +5,7 @@
   "buildCommand": "cd ../.. && npm run build:admin",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/admin/:path*", "destination": "https://api.aioverviewhub.com/api/admin/:path*" },
+    { "source": "/api/admin/:path*", "destination": "https://www.aioverviewhub.com/api/admin/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -4,14 +4,14 @@
 //   npm run demo:accounts                                   -> SQL to add the demo accounts (safe to re-run)
 //   npm run demo:accounts -- --owner you@example.com        -> also make that email an owner of every demo account
 //   npm run demo:accounts -- --remove                       -> SQL to delete every demo account and everything under it
-//   then: npm run demo:accounts > demo.sql && npx wrangler d1 execute ai-overview-hub --remote --file demo.sql
+//   then: npm run demo:accounts > demo.sql && psql "$DATABASE_URL" -f demo.sql   (or paste it into the Neon SQL editor)
 // Demo subscriptions use status 'demo', which the admin revenue metrics do not count as paying.
 import { readFileSync } from 'node:fs';
 const { accounts } = JSON.parse(readFileSync(new URL('../packages/core/src/demo-accounts.json', import.meta.url), 'utf8'));
 const args = process.argv.slice(2);
 const flag = name => { const i = args.indexOf(name); return i === -1 ? undefined : args[i + 1] ?? ''; };
 const sql = v => v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`;
-const row = (table, values) => `INSERT OR IGNORE INTO ${table} (${Object.keys(values).join(',')}) VALUES (${Object.values(values).map(sql).join(',')});`;
+const row = (table, values) => `INSERT INTO ${table} (${Object.keys(values).join(',')}) VALUES (${Object.values(values).map(sql).join(',')}) ON CONFLICT DO NOTHING;`;
 const out = [];
 
 if (args.includes('--remove')) {
@@ -31,7 +31,7 @@ if (args.includes('--remove')) {
   const owner = flag('--owner')?.trim().toLowerCase();
   if (owner !== undefined && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(owner)) { console.error('Usage: npm run demo:accounts -- [--owner <email>] [--remove]'); process.exit(1); }
   const now = new Date().toISOString();
-  if (owner) out.push(`INSERT OR IGNORE INTO users (id,email,email_verified_at,created_at) VALUES ('demo_owner_' || lower(hex(randomblob(8))),${sql(owner)},${sql(now)},${sql(now)});`);
+  if (owner) out.push(`INSERT INTO users (id,email,email_verified_at,created_at) VALUES ('demo_owner_' || substr(md5(random()::text),1,16),${sql(owner)},${sql(now)},${sql(now)}) ON CONFLICT DO NOTHING;`);
   for (const a of accounts) {
     const project = `${a.id}_project`;
     const providers = Object.keys(a.methods);
@@ -39,8 +39,8 @@ if (args.includes('--remove')) {
       `-- ${a.name}`,
       row('accounts', { id: a.id, name: a.name, created_at: a.createdAt }),
       row('users', { id: `${a.id}_owner`, email: a.owner.email, email_verified_at: a.createdAt, created_at: a.createdAt }),
-      `INSERT OR IGNORE INTO account_users (account_id,user_id,role) SELECT ${sql(a.id)},id,'owner' FROM users WHERE email=${sql(a.owner.email)};`,
-      ...(owner ? [`INSERT OR IGNORE INTO account_users (account_id,user_id,role) SELECT ${sql(a.id)},id,'owner' FROM users WHERE email=${sql(owner)};`] : []),
+      `INSERT INTO account_users (account_id,user_id,role) SELECT ${sql(a.id)},id,'owner' FROM users WHERE email=${sql(a.owner.email)} ON CONFLICT DO NOTHING;`,
+      ...(owner ? [`INSERT INTO account_users (account_id,user_id,role) SELECT ${sql(a.id)},id,'owner' FROM users WHERE email=${sql(owner)} ON CONFLICT DO NOTHING;`] : []),
       row('subscriptions', { id: `${a.id}_sub`, account_id: a.id, plan_id: 'starter', stripe_customer_id: 'demo', stripe_subscription_id: null, status: 'demo', period_start: null, period_end: null, updated_at: a.createdAt, created_at: a.createdAt }),
       row('account_controls', { account_id: a.id, status: 'active', addon_waived: 1, notes: 'Demo account (fictional data). Remove with: npm run demo:accounts -- --remove', updated_by: 'demo-seed', updated_at: a.createdAt }),
       row('projects', { id: project, account_id: a.id, name: a.name, primary_domain: a.domain, providers: JSON.stringify(providers), frequency: a.frequency, created_at: a.createdAt, source_methods: JSON.stringify(a.methods), location: JSON.stringify(a.location) }),

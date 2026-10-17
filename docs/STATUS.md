@@ -18,7 +18,7 @@ _Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 - A **check** is one query on one source (engine + method). The plan includes one method per engine. Each extra method is an add-on check priced by `plans.addon_unit_price`, which is `NULL` until a price is decided.
 - `usage_events` records `method` and an `addon` flag, ready to report to a Stripe metered price. No Stripe metered price is wired up yet.
 
-### API (`apps/api`, Hono, set up for Cloudflare Workers)
+### API (`apps/api`, Hono, a Vercel Function on Neon Postgres)
 - `GET /api/sources`: source catalog with availability based on configured credentials. It never names vendors, including in error messages.
 - `POST /api/quote`: validates a selection and location against the plan and returns checks, included checks and add-on checks.
 - Existing: health checks and `POST /api/runs` (enqueues a run).
@@ -34,16 +34,23 @@ _Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 ### Customer portal (`apps/web`): screens only, not functional yet
 - Every menu item is a working screen on example data (`apps/web/src/Portal.tsx`): Overview, Projects, AI sources, Queries (add, filter, remove; capped at 100), Reports (real XLSX / CSV-zip downloads generated in the browser from a demo run via `packages/reporting`, loaded lazily), Billing (plan, usage, invoices) and Settings (profile, brand names and alternate domains, schedule, email notifications). Mobile has a scrolling tab bar.
 - **Demo customer accounts.** Four fictional customers (Northwind CRM, Bluefin Outdoor, Harbor & Pine Legal, Sola Dental Group) live in `packages/core/src/demo-accounts.json`, with different industries, countries, AI sources and run histories. The portal's sidebar switcher (a dropdown on mobile) moves between them, and every screen, including the overview metrics and report downloads, is generated from that account's data. Domains and emails use the reserved `.example` domain.
-- **Seeding the demo accounts into the database:** `npm run demo:accounts > demo.sql`, then `npx wrangler d1 execute ai-overview-hub --remote --file demo.sql`. Add `-- --owner you@yourdomain.com` to make yourself an owner of every demo account, ready for when customer login exists. `-- --remove` prints SQL that deletes them all. Demo subscriptions use status `demo`, so the admin panel lists them but leaves them out of MRR. The seed adds accounts, owners, projects, domains and queries, not run history.
+- **Seeding the demo accounts into the database:** `npm run demo:accounts > demo.sql`, then `psql "$DATABASE_URL" -f demo.sql` (or paste it into the Neon SQL editor). Add `-- --owner you@yourdomain.com` to make yourself an owner of every demo account, ready for when customer login exists. `-- --remove` prints SQL that deletes them all. Demo subscriptions use status `demo`, so the admin panel lists them but leaves them out of MRR. The seed adds accounts, owners, projects, domains and queries, not run history.
 - **Not done yet:** there's no customer login, and queries, sources and settings save only in the browser (`localStorage`), not to the server. "New project" and "Manage payment & cancel" are disabled until the projects API and the Stripe Customer Portal are wired up.
 
 ### Quality
 - 44 automated tests cover providers, routing, locations, quoting, the API endpoints and exports. Lint, typecheck (now including the API app) and the build pass.
 - None of this has been run against the real APIs. Adapters follow each vendor's documentation and are tested with sample responses.
 
+## Moved to Vercel + Neon (2026-10-17)
+- The API now runs as a Vercel Function on the `ai-overview-hub-public` project, next to the site, under `/api` (`apps/api/src/vercel.ts`, bundled by `scripts/build-vercel.mjs`). The Cloudflare Workers setup (`wrangler.toml`, D1, Queues) is gone; it had never been provisioned.
+- The database is Neon Postgres. Migrations were ported to PostgreSQL and are applied by every Vercel build (`scripts/migrate.mjs`). `packages/db` keeps the API's `prepare().bind()` interface. Tests and `npm run dev:api` run on an in-process PostgreSQL (PGlite), so they exercise the real dialect.
+- The queue is the `queue_messages` table (migration `0006_job_queue.sql`). There is still no consumer; it should claim rows with `FOR UPDATE SKIP LOCKED`, triggered by Vercel Cron.
+- **Production and Preview share one Neon database** (the integration's variables target both). Previews and staging therefore read and write production data, and every preview build migrates it. Enable Neon's per-preview branching in the integration before real customers arrive.
+- Not ported yet: object storage for reports (was R2; use Vercel Blob) and the daily cron (no handler existed).
+
 ## Stripe (sandbox configured 2026-10-17)
-- Sandbox account set up: product, $69.99/month price (lookup key `starter_monthly`), Customer Portal, and a webhook endpoint for subscription events. IDs and the go-live table are in `docs/BILLING.md`.
-- `POST /api/stripe/webhook` records subscriptions from Stripe events (migration `0005_stripe_webhooks.sql`, tests in `tests/billing.test.ts`). Checkout now tags subscriptions with the account and requires a billing address and accepts tax IDs.
+- Sandbox account set up: product, $69.99/month price (lookup key `starter_monthly`), Customer Portal, and a webhook endpoint pointing at staging. Vercel's Preview environment holds the sandbox values; Production is for live. IDs and the go-live table are in `docs/BILLING.md`.
+- `POST /api/stripe/webhook` records subscriptions from Stripe events and logs each one in `webhook_events` (migration `0005_stripe_webhooks.sql`, tests in `tests/billing.test.ts`). Checkout now tags subscriptions with the account and requires a billing address and accepts tax IDs.
 - Not done: checkout and portal endpoints for customers (they need customer login), the add-on metered price (`addon_unit_price` undecided), the Stripe Tax head office address and registrations, and live mode.
 
 ## Next: customer portal (make it real)
@@ -63,7 +70,7 @@ See `docs/ADMIN.md` for pages, cost model, security and setup.
 
 ### Decisions taken (change if needed)
 1. **Login**: email link plus authenticator code, as proposed. No email adapter exists yet, so links are logged (`EMAIL_PROVIDER=console`) until one is wired up.
-2. **Hosting**: the API stays on Cloudflare Workers. The admin Vercel project proxies `/api/admin/*` to `https://api.aioverviewhub.com`.
+2. **Hosting**: everything is on Vercel with Neon Postgres (Cloudflare is DNS only). The admin Vercel project proxies `/api/admin/*` to `https://www.aioverviewhub.com`.
 3. **Controls**: the draft list, plus vendor cost rates and global source kill switches.
 
 ### Still to do for the panel
@@ -79,6 +86,6 @@ See `docs/ADMIN.md` for pages, cost model, security and setup.
   - Decide whether ChatGPT API answers should always search (`tool_choice: "required"`).
 - Set `plans.addon_unit_price` and create the matching Stripe metered price.
 - Stripe live mode: follow the table in `docs/BILLING.md` (product, price, webhook endpoint, portal, Tax head office and registrations), then set the live `STRIPE_*` secrets.
-- Apply migrations `0002` to `0005`.
+- Migrations apply automatically on each Vercel build; confirm `schema_migrations` lists `0001` to `0006` in production.
 - Admin panel: set `ADMIN_TOTP_KEY`, `ADMIN_URL`, `ADMIN_ORIGIN`, the `VERCEL_*` read token and project IDs, create the first operator, and enter vendor cost rates.
 - Known location limits: Oxylabs supports country only (no region or city). Bing, DuckDuckGo and Naver don't use location at all.

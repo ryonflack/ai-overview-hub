@@ -8,16 +8,22 @@ Usage is counted in **answer checks**: one query on one source (engine + collect
 
 ## Webhooks
 
-`POST /api/stripe/webhook` verifies the signature (`STRIPE_WEBHOOK_SECRET`) and applies `customer.subscription.created`, `.updated` and `.deleted` to `subscriptions` (`packages/billing/src/webhooks.ts`). Checkout puts `accountId` and `planId` in subscription metadata; subscriptions without an `accountId` (e.g. created by hand in the Dashboard) are acknowledged and ignored. Each event is recorded once in `stripe_events`, and `subscriptions.stripe_event_at` stops an older, late delivery from overwriting newer state. `canceled_at` is when the subscription ended (churn), not when a cancel-at-period-end was requested. Unrecognised event types return 200 and are recorded as `ignored`.
+`POST /api/stripe/webhook` verifies the signature (`STRIPE_WEBHOOK_SECRET`) and applies `customer.subscription.created`, `.updated` and `.deleted` to `subscriptions` (`packages/billing/src/webhooks.ts`). Checkout puts `accountId` and `planId` in subscription metadata; subscriptions without an `accountId` (e.g. created by hand in the Dashboard) are acknowledged and ignored. Every event is logged in `webhook_events` as `PROCESSED`, `IGNORED` or `FAILED`; the admin Performance page counts failures. A failed event is applied again when Stripe redelivers it, and `subscriptions.stripe_event_at` stops an older, late delivery from overwriting newer state. `canceled_at` is when the subscription ended (churn), not when a cancel-at-period-end was requested.
 
-## Stripe account setup
+`GET /api/health/billing` reports whether that deployment's Stripe key is a test or live key and whether the webhook secret and price are set, without revealing any value. Use it after changing environment variables.
 
-| | Sandbox (done) | Live (to do) |
+## Stripe and Vercel setup
+
+Stripe variables use the same names in every Vercel environment with different values: **Preview** (including staging, `aio-staging.aioverviewhub.com`) uses the Stripe sandbox; **Production** (`www.aioverviewhub.com`) uses the live account.
+
+| | Sandbox → Vercel Preview (done) | Live → Vercel Production (to do at launch) |
 |---|---|---|
-| Product | `prod_VDHsoqcXIy2nxF`, AI Overview Hub Monthly Subscription, tax code `txcd_10103001` (SaaS), statement descriptor `AIOVERVIEWHUB` | Copy from sandbox |
-| Price | `price_1UCrISDWX9gitE6lIpXnp9xS`, $69.99/month, tax exclusive, lookup key `starter_monthly`, metadata `plan_id=starter` | New price ID: set `STRIPE_PRICE_ID` in production |
-| Webhook endpoint | `we_1URLhyDWX9gitE6lE0YzMfMP` → `https://api.aioverviewhub.com/api/stripe/webhook`, API version `2026-08-26.dahlia` (matches the `stripe` SDK), the three subscription events | Create the same endpoint in live mode; its signing secret differs |
-| Customer Portal | Payment methods, invoices, billing details, cancel at period end with reason; return URL `https://app.aioverviewhub.com/` | Same settings, plus terms and privacy URLs once those pages exist |
-| Stripe Tax | Defaults set (SaaS code, exclusive). **Pending: head office address missing**, and no registrations | Head office address and registrations where you must collect tax |
+| `STRIPE_SECRET_KEY` | Sandbox secret key (`sk_test_…`) | Live secret key (`sk_live_…`) |
+| `STRIPE_PRICE_ID` | `price_1UCrISDWX9gitE6lIpXnp9xS`: $69.99/month, tax exclusive, lookup key `starter_monthly`, metadata `plan_id=starter` | Create the same price in live mode |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret of `we_1URLhyDWX9gitE6lE0YzMfMP` | Signing secret of the live endpoint |
+| Webhook endpoint | `https://aio-staging.aioverviewhub.com/api/stripe/webhook`, with the Vercel automation-bypass query parameter (staging is behind Vercel Authentication); API version `2026-08-26.dahlia` (matches the `stripe` SDK); the three subscription events | `https://www.aioverviewhub.com/api/stripe/webhook`, same version and events, no bypass needed |
+| Product | `prod_VDHsoqcXIy2nxF`, tax code `txcd_10103001` (SaaS), statement descriptor `AIOVERVIEWHUB` | Copy from sandbox |
+| Customer Portal | Payment methods, invoices, billing details, cancel at period end with reason; returns to `https://aio-staging.aioverviewhub.com/` | Same, returning to `https://www.aioverviewhub.com/`, plus terms and privacy URLs once those pages exist |
+| Stripe Tax | SaaS tax code, exclusive. **Pending: head office address**, and no registrations yet | Head office address and registrations where you must collect tax |
 
-Set per environment with `wrangler secret put STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, and `STRIPE_PRICE_ID` as a variable. Test locally with `stripe listen --forward-to localhost:8787/api/stripe/webhook` (it prints its own signing secret). The webhook endpoint returns errors until the API is deployed at `api.aioverviewhub.com` with these secrets and migration `0005` applied; Stripe retries failed deliveries for three days and then disables the endpoint after repeated failures, so it can be disabled in the Dashboard until the API is live.
+Test locally with `npm run dev:api` and `stripe listen --forward-to localhost:8787/api/stripe/webhook` (it prints its own signing secret for `STRIPE_WEBHOOK_SECRET` in `.env`).

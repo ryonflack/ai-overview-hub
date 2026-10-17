@@ -42,19 +42,19 @@ The env vars (`SIMULATED_VENDOR`, `SIMULATED_VENDOR_<ENGINE>`) stay the defaults
 
 ## Setup
 
-1. Apply migration `0004_admin.sql`: `npx wrangler d1 migrations apply ai-overview-hub --remote`.
-2. Generate the encryption key with `npm run admin:key`, then store it with `npx wrangler secret put ADMIN_TOTP_KEY`.
-3. Set `ADMIN_URL` and `ADMIN_ORIGIN` to `https://admin.aioverviewhub.com` on the API.
-4. Create an operator: `ADMIN_TOTP_KEY=… npm run admin:operator -- you@example.com "Your Name"`. Scan the printed `otpauth://` URI with an authenticator app, then run the printed `INSERT` with `npx wrangler d1 execute ai-overview-hub --remote --command "…"`.
-5. For Vercel health, create a read-only Vercel token and set `VERCEL_API_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG` and `VERCEL_PROJECT_IDS` (comma-separated) as API secrets.
-6. Create the Vercel project: import this repository again, set **Root Directory** to `apps/admin`, and keep the settings from `apps/admin/vercel.json`. Add the `admin.aioverviewhub.com` domain and its DNS record in Cloudflare (DNS-only until the certificate is issued). The project rewrites `/api/admin/*` to `https://api.aioverviewhub.com`, so requests stay same-origin. Update that destination if the API lives elsewhere.
+1. Migrations, including `0004_admin.sql`, are applied automatically by each Vercel build (`scripts/migrate.mjs`).
+2. Generate the encryption key with `npm run admin:key`, then add it as a Sensitive environment variable `ADMIN_TOTP_KEY` on the `ai-overview-hub-public` Vercel project.
+3. Set `ADMIN_URL` and `ADMIN_ORIGIN` to `https://admin.aioverviewhub.com` on the `ai-overview-hub-public` Vercel project (Production).
+4. Create an operator: `ADMIN_TOTP_KEY=… npm run admin:operator -- you@example.com "Your Name"`. Scan the printed `otpauth://` URI with an authenticator app, then run the printed `INSERT` in the Neon SQL editor or with `psql "$DATABASE_URL" -c "…"`.
+5. For Vercel health, create a read-only Vercel token and set `VERCEL_API_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG` and `VERCEL_PROJECT_IDS` (comma-separated) as environment variables on the `ai-overview-hub-public` Vercel project.
+6. Create the Vercel project: import this repository again, set **Root Directory** to `apps/admin`, and keep the settings from `apps/admin/vercel.json`. Add the `admin.aioverviewhub.com` domain and its DNS record in Cloudflare (DNS-only until the certificate is issued). The project rewrites `/api/admin/*` to `https://www.aioverviewhub.com` (the API's Vercel function), so requests stay same-origin. Update that destination if the API moves.
 
-**Email delivery:** there is no email adapter in the codebase yet. Sign-in only works with `EMAIL_PROVIDER=console`, which writes the link to the API logs (`npx wrangler tail`). That's fine for local work and a single operator, but wire a real email provider before adding other operators, since anyone with log access gets the first factor.
+**Email delivery:** there is no email adapter in the codebase yet. Sign-in only works with `EMAIL_PROVIDER=console`, which writes the link to the API's runtime logs (Vercel → `ai-overview-hub-public` → Logs). That's fine for local work and a single operator, but wire a real email provider before adding other operators, since anyone with log access gets the first factor.
 
 ## Local development
 
 ```bash
-npm run dev:admin                              # http://localhost:4174, proxies /api/admin to wrangler dev on :8787
+npm run dev:admin                              # http://localhost:4174, proxies /api/admin to `npm run dev:api` on :8787
 VITE_ADMIN_DEMO=true npm run dev:admin         # fictional data, no API needed
 ```
 

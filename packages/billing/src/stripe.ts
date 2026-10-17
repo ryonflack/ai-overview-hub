@@ -2,7 +2,7 @@ import Stripe from 'stripe';
 import { AppError } from '../../core/src/errors';
 import type { Plan } from '../../core/src/types';
 export interface BillingGateway { createCheckout(accountId:string,customerId:string,plan:Plan,successUrl:string,cancelUrl:string):Promise<string>; createPortal(customerId:string,returnUrl:string):Promise<string>; verifyWebhook(payload:string,signature:string):Promise<Stripe.Event> }
-// Fetch and SubtleCrypto work on both Cloudflare Workers and Node, so signature checks must use the async API.
+// Fetch and SubtleCrypto keep the client runtime-neutral (Vercel's Node.js functions, tests, edge runtimes); SubtleCrypto needs the async signature check.
 const cryptoProvider=Stripe.createSubtleCryptoProvider();
 export class StripeGateway implements BillingGateway { private stripe:Stripe; constructor(secret:string,private webhookSecret:string){this.stripe=new Stripe(secret,{httpClient:Stripe.createFetchHttpClient()})}
   // accountId/planId in subscription metadata let the webhook attach the subscription to the account (packages/billing/src/webhooks.ts).

@@ -7,9 +7,12 @@
   },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:api": "node scripts/dev-api.mjs",
     "dev:admin": "vite --config apps/admin/vite.config.ts --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "build:admin": "tsc -b && vite build --config apps/admin/vite.config.ts",
+    "vercel-build": "node scripts/migrate.mjs && npm run build && node scripts/build-vercel.mjs",
+    "db:migrate": "node scripts/migrate.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run --root . --coverage.enabled=false",
@@ -20,6 +23,7 @@
     "demo:accounts": "node scripts/seed-demo-accounts.mjs"
   },
   "dependencies": {
+    "@neondatabase/serverless": "latest",
     "@vitejs/plugin-react": "latest",
     "hono": "latest",
     "jszip": "latest",
@@ -30,7 +34,9 @@
     "xlsx": "latest"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "latest",
     "@eslint/js": "latest",
+    "@hono/node-server": "latest",
     "@types/node": "latest",
     "@types/papaparse": "latest",
     "@types/react": "latest",
@@ -39,6 +45,7 @@
     "eslint-plugin-react-hooks": "latest",
     "eslint-plugin-react-refresh": "latest",
     "globals": "latest",
+    "rolldown": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest",
     "vite": "latest",

@@ -1,6 +1,6 @@
-PRAGMA foreign_keys = ON;
-CREATE TABLE users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,email_verified_at TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE accounts (id TEXT PRIMARY KEY,name TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+-- PostgreSQL (Neon). Timestamps are ISO-8601 UTC text, written by the application.
+CREATE TABLE users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,email_verified_at TEXT,created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
+CREATE TABLE accounts (id TEXT PRIMARY KEY,name TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
 CREATE TABLE account_users (account_id TEXT NOT NULL REFERENCES accounts(id),user_id TEXT NOT NULL REFERENCES users(id),role TEXT NOT NULL CHECK(role IN ('owner','admin','member')),PRIMARY KEY(account_id,user_id));
 CREATE TABLE plans (id TEXT PRIMARY KEY,name TEXT NOT NULL,stripe_price_id TEXT NOT NULL UNIQUE,monthly_price INTEGER NOT NULL,max_queries INTEGER NOT NULL,allowed_providers TEXT NOT NULL,run_frequency TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE subscriptions (id TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES accounts(id),plan_id TEXT NOT NULL REFERENCES plans(id),stripe_customer_id TEXT NOT NULL,stripe_subscription_id TEXT UNIQUE,status TEXT NOT NULL,period_start TEXT,period_end TEXT,updated_at TEXT NOT NULL);
