@@ -8,7 +8,9 @@ import { applyRouting,maskAvailability } from '../../../packages/admin/src/routi
 import { verifyStripeWebhook } from '../../../packages/billing/src/stripe';
 import { applyStripeEvent } from '../../../packages/billing/src/webhooks';
 import { sha256Hex } from '../../../packages/admin/src/auth';
+import { neonAuthBaseUrl } from '../../../packages/auth/src/index';
 import admin,{ loadGlobalRouting } from './admin';
+import portal from './app';
 import type { AdminEnv } from './admin';
 export type Env=AdminEnv&{REPORTS:unknown;SERPAPI_API_KEY?:string;PERPLEXITY_API_KEY?:string;PERPLEXITY_PRESET?:string;OPENAI_API_KEY?:string;OPENAI_MODEL?:string;OXYLABS_USERNAME?:string;OXYLABS_PASSWORD?:string;DATAFORSEO_LOGIN?:string;DATAFORSEO_PASSWORD?:string;SIMULATED_VENDOR?:string;SIMULATED_VENDOR_CHATGPT?:string;SIMULATED_VENDOR_PERPLEXITY?:string;USE_MOCK_SERP_PROVIDERS?:string;STRIPE_SECRET_KEY?:string;STRIPE_API_SECRET?:string;STRIPE_WEBHOOK_SECRET?:string;STRIPE_PRICE_ID?:string};
 const app=new Hono<{Bindings:Env}>();
@@ -26,6 +28,9 @@ app.post('/api/stripe/webhook',async c=>{const requestId=c.req.header('x-request
 export const stripeSecretKey=(env:Env)=>env.STRIPE_API_SECRET||env.STRIPE_SECRET_KEY||'';
 // Which Stripe mode this deployment is in, without exposing any value: lets each environment be checked after its variables change.
 app.get('/api/health/billing',c=>{const key=stripeSecretKey(c.env);const mode=/^(sk|rk)_live_/.test(key)?'live':/^(sk|rk)_test_/.test(key)?'test':key?'unrecognized':'missing';return c.json({status:mode==='missing'||!c.env.STRIPE_WEBHOOK_SECRET||!c.env.STRIPE_PRICE_ID?'unconfigured':'ok',stripeMode:mode,webhookSecret:Boolean(c.env.STRIPE_WEBHOOK_SECRET),priceId:Boolean(c.env.STRIPE_PRICE_ID)})});
+// Sign-in readiness: the Neon Auth URL is configured and its public keys can be fetched (no values are exposed).
+app.get('/api/health/auth',async c=>{const base=neonAuthBaseUrl(c.env);if(!base)return c.json({status:'unconfigured'},503);try{const r=await fetch(`${base}/.well-known/jwks.json`,{signal:AbortSignal.timeout(5000)});const keys=r.ok?((await r.json()) as {keys?:unknown[]}).keys?.length??0:0;return c.json({status:keys?'ok':'unavailable',keys},keys?200:503)}catch{return c.json({status:'unavailable'},503)}});
+app.route('/api/app',portal);
 app.route('/api/admin',admin);
 app.onError((error,c)=>c.json(errorResponse(error,c.req.header('x-request-id')??crypto.randomUUID()),500));
 export default app;
