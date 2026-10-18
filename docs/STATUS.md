@@ -97,6 +97,7 @@ See `docs/ADMIN.md` for pages, cost model, security and setup.
   - Decide whether ChatGPT API answers should always search (`tool_choice: "required"`).
 - Set `plans.addon_unit_price` and create the matching Stripe metered price.
 - Allow search engines: remove the site-wide `x-robots-tag` route in `scripts/build-vercel.mjs` (keep the one for `/welcome` and `/thank-you`) and the `robots` meta tag in `apps/web/index.html` (the admin site stays `noindex`).
+- **Google Ads:** update the video in the Performance Max campaign with the latest demo before launch. Re-record it first if the portal has changed (`media/demo/record.mjs`; current cut: `media/demo/ai-overview-hub-demo.mp4`).
 - Company email addresses (`support@`, `hello@`, `billing@`, `notifications@`) send and receive; see Next, item 2.
 - Stripe live mode: follow the table in `docs/BILLING.md` (product, price, webhook endpoint, portal, Tax head office and registrations), then set the live `STRIPE_*` secrets.
 - Migrations apply automatically on each Vercel build; confirm `schema_migrations` lists `0001` to `0006` in production.
