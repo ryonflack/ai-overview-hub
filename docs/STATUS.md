@@ -1,6 +1,6 @@
 # Project status and next steps
 
-_Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
+_Last updated: 2026-10-18 (portal mostly done; launch planned for late December 2026). This is the hand-off note._
 
 ## Done to date
 
@@ -57,6 +57,11 @@ _Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 - The sandbox account has **Managed Payments** on by default: Stripe (through Link) is the merchant of record and handles sales tax, so Checkout omits its own tax options unless Stripe Tax is active. Confirm this is intended before going live (it changes fees and who sells to the customer).
 - Not done: the add-on metered price (`addon_unit_price` undecided) and live mode.
 
+## Launch plan: late December 2026
+The customer portal is mostly done: sign-up and sign-in, project and sources, queries, runs with usage caps, reports and exports, billing (Stripe sandbox), settings, lifecycle emails, and the phone layout. It currently lives inside the sales site (`apps/web/src/app/`, routes `#/overview`, `#/billing`, …) with its API in `apps/api`. Before launch:
+1. **Move the portal to its own app and Vercel project:** `apps/portal` at `app.aioverviewhub.com`, with the API (`apps/api`), `CRON_SECRET` and the daily cron moving to that project. `apps/web` becomes marketing only, with "Log in" and "Start monitoring" linking to the portal. Add `https://app.aioverviewhub.com` to Neon Auth trusted domains, and point the Stripe webhook and `APP_URL` at the new domain.
+2. Then work through Next and the checklist below on launch week.
+
 ## Next
 1. **Go live with Stripe** (launch day): live product, price, webhook and Production `STRIPE_*` variables; see the checklist below.
 2. **Company email** (before launch): Google Workspace on `aioverviewhub.com` with one user and the aliases `support@`, `hello@`, `billing@` and `notifications@`, so these addresses can send and receive. Steps: verify the domain in Cloudflare DNS; turn off Cloudflare Email Routing and add MX `smtp.google.com` (priority 1); change the root SPF to `v=spf1 include:_spf.google.com ~all`; turn on Google DKIM (`google._domainkey`) before sending, since DMARC is `p=quarantine`. Leave Resend's `send.` and `resend._domainkey` records alone. Then set `support@` as reply-to on app emails and the Resend templates (`aioh-*`).
@@ -91,7 +96,7 @@ See `docs/ADMIN.md` for pages, cost model, security and setup.
   - Confirm `OPENAI_MODEL` (default `gpt-5-mini`) is still a current model.
   - Decide whether ChatGPT API answers should always search (`tool_choice: "required"`).
 - Set `plans.addon_unit_price` and create the matching Stripe metered price.
-- Allow search engines: remove the `x-robots-tag` route in `scripts/build-vercel.mjs` and the `robots` meta tag in `apps/web/index.html` (the admin site stays `noindex`).
+- Allow search engines: remove the site-wide `x-robots-tag` route in `scripts/build-vercel.mjs` (keep the one for `/welcome` and `/thank-you`) and the `robots` meta tag in `apps/web/index.html` (the admin site stays `noindex`).
 - Company email addresses (`support@`, `hello@`, `billing@`, `notifications@`) send and receive; see Next, item 2.
 - Stripe live mode: follow the table in `docs/BILLING.md` (product, price, webhook endpoint, portal, Tax head office and registrations), then set the live `STRIPE_*` secrets.
 - Migrations apply automatically on each Vercel build; confirm `schema_migrations` lists `0001` to `0006` in production.
