@@ -21,7 +21,9 @@ if(import.meta.url===`file://${process.argv[1]}`){
   writeFileSync(`${fn}/.vc-config.json`,JSON.stringify({runtime:'nodejs22.x',handler:'index.mjs',launcherType:'Nodejs',maxDuration:60},null,2));
   // /auth/* (customer sign-in, forwarded to Neon Auth by the API so its cookie is first-party) runs on the same function.
   // Until launch, every response (pages, files and the API) tells search engines not to index or follow it. Remove this route to go public.
-  const routes=[{src:'^/(.*)$',headers:{'x-robots-tag':'noindex, nofollow'},continue:true},{src:'^/(?:api|auth)(?:/.*)?$',dest:'/api'},{handle:'filesystem'}];
+  // /welcome and /thank-you are app pages with real paths (served by index.html) and stay out of search results after launch too.
+  const confirm='^/(?:welcome|thank-you)/?$';
+  const routes=[{src:'^/(.*)$',headers:{'x-robots-tag':'noindex, nofollow'},continue:true},{src:confirm,headers:{'x-robots-tag':'noindex, nofollow'},continue:true},{src:'^/(?:api|auth)(?:/.*)?$',dest:'/api'},{handle:'filesystem'},{src:confirm,dest:'/index.html'}];
   // Daily: start due monthly runs and pick up any queued checks (the worker also chains itself while work remains).
   writeFileSync(`${out}/config.json`,JSON.stringify({version:3,routes,crons:[{path:'/api/internal/worker',schedule:'15 6 * * *'}]},null,2));
   console.log('Vercel build output written to .vercel/output (static site + api function).');

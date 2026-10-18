@@ -3,7 +3,7 @@ import type {Me} from '../session';
 import {trackOnce} from '../track';
 import {Head,money} from './ui';
 
-/** Confirmation pages with stable URLs for analytics: #/welcome after sign-up, #/thank-you when Stripe Checkout returns. */
+/** Confirmation pages with stable URLs for analytics: /welcome after sign-up, /thank-you when Stripe Checkout returns. Both are noindex. */
 export function WelcomePage({me}:{me:Me}){
   const first=me.user.name?.trim().split(/\s+/)[0];
   const steps:[string,string,string,string][]=[['Set up your project','Add your website and brand names, then choose which AI answers to check.','#/project','Set up project'],

@@ -16,7 +16,9 @@ export function Problem({error}:{error:string|null}){return error?<div className
 export function Loading(){return <p className="muted loading">Loading…</p>}
 
 /** Changes the portal page (#/overview, #/login, …). */
-export const navigate=(hash:string)=>{window.location.hash=hash};
+export const navigate=(hash:string)=>{if(location.pathname!=='/'){location.href='/'+hash;return}window.location.hash=hash};
+/** Opens a page that has a real path (/welcome, /thank-you) without reloading the app. */
+export const goTo=(path:string)=>{history.pushState(null,'',path);dispatchEvent(new PopStateEvent('popstate'))};
 
 /** Loads data for a page; a 401 sends the visitor to sign in. `reload` re-fetches after a change and resolves once it has. `key`
  * re-runs the load when it changes. */

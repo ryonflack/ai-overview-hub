@@ -64,7 +64,7 @@ describe('portal billing and runs',()=>{let db:TestDB;let stripe:{calls:{method:
 
   it('starts Checkout once per workspace and opens the portal afterwards',async()=>{expect((await call('/billing/portal',{method:'POST'})).status).toBe(409);
     const res=await call('/billing/checkout',{method:'POST'});expect(res.status).toBe(200);expect(await res.json()).toMatchObject({url:'https://checkout.stripe.test/s'});
-    const checkout=stripe.calls.find(c=>c.method==='createCheckout')!.args[0] as Record<string,unknown>;expect(checkout).toMatchObject({customerId:'cus_new',priceId:'price_test',planId:'starter',automaticTax:false,successUrl:'http://localhost/#/thank-you'});
+    const checkout=stripe.calls.find(c=>c.method==='createCheckout')!.args[0] as Record<string,unknown>;expect(checkout).toMatchObject({customerId:'cus_new',priceId:'price_test',planId:'starter',automaticTax:false,successUrl:'http://localhost/thank-you'});
     await call('/billing/checkout',{method:'POST'});expect(stripe.calls.filter(c=>c.method==='createCustomer')).toHaveLength(1);
     expect((await call('/billing/portal',{method:'POST'})).status).toBe(200);
     await subscribe();expect((await call('/billing/checkout',{method:'POST'})).status).toBe(409);
