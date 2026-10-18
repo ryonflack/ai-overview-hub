@@ -16,8 +16,7 @@ await ctx.addInitScript(()=>{const add=()=>{if(document.getElementById('demo-cap
   window.__cap=t=>{const s=sessionStorage;s.setItem('cap',t||'');c.textContent=t||'';c.style.opacity=t?'1':'0'};const saved=sessionStorage.getItem('cap');if(saved)window.__cap(saved)};
   if(document.body)add();else addEventListener('DOMContentLoaded',add)});
 const cap=t=>p.evaluate(t=>window.__cap?.(t),t);const wait=ms=>p.waitForTimeout(ms);
-let pos={x:640,y:400};
-const moveTo=async loc=>{await loc.scrollIntoViewIfNeeded();const bx=await loc.boundingBox();const x=bx.x+bx.width/2,y=bx.y+bx.height/2;await p.mouse.move(x,y,{steps:22});pos={x,y};await wait(250)};
+const moveTo=async loc=>{await loc.scrollIntoViewIfNeeded();const bx=await loc.boundingBox();const x=bx.x+bx.width/2,y=bx.y+bx.height/2;await p.mouse.move(x,y,{steps:22});await wait(250)};
 const click=async loc=>{await moveTo(loc);await p.mouse.down();await wait(80);await p.mouse.up();await wait(500)};
 const type=async(loc,text)=>{await click(loc);await loc.pressSequentially(text,{delay:55});await wait(300)};
 const scrollTo=async(sel,offset=0)=>{await p.evaluate(([s,o])=>{const el=document.querySelector(s);scrollTo({top:el.getBoundingClientRect().top+scrollY-o,behavior:'smooth'})},[sel,offset]);await wait(1300)};
