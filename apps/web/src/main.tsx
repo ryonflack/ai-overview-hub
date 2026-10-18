@@ -6,7 +6,7 @@ import{Dashboard}from'./Dashboard';
 import{Methodology}from'./Methodology';
 import type{Page}from'./app/Portal';
 // The signed-in portal and sign-in screens load on demand, so the marketing page stays light.
-const Portal=lazy(()=>import('./app/Portal'));const Login=lazy(()=>import('./app/Login'));const portalPages=['overview','project','queries','reports','billing','settings'];
+const Portal=lazy(()=>import('./app/Portal'));const Login=lazy(()=>import('./app/Login'));const portalPages=['overview','project','queries','reports','billing','settings','welcome','thank-you'];
 function BetaBanner(){return <div className="betabar" role="note"><span className="beta-pill">Beta</span><span><strong>AI Overview Hub is in open beta.</strong> Try it risk-free: no contract, cancel anytime, and your feedback shapes what we build next.</span><a href={RANKINGS_HASH}>How rankings work →</a></div>}
 /** What each monitored platform gives a subscriber: the answer we check, how it is collected, and where location applies (packages/core/src/sources.ts). */
 const platforms:[string,string,string,string][]=[

@@ -159,7 +159,7 @@ portal.post('/billing/checkout',async c=>{requireOwner(c);const db=c.env.DB;cons
   if(entitled)throw new AppError('VALIDATION_ERROR','This workspace already has an active subscription. Use Manage billing to change it.',409);
   const priceId=String(c.env.STRIPE_PRICE_ID||'');if(!priceId)throw new AppError('CONFIGURATION_ERROR','Billing is not configured.',503);
   const gateway=billingGateway(c.env);const customerId=await stripeCustomer(c);const automaticTax=await gateway.taxActive().catch(()=>false);
-  const url=await gateway.createCheckout({accountId:c.var.account.id,customerId,priceId,planId:plan.id,successUrl:`${origin(c)}/#/billing?checkout=success`,cancelUrl:`${origin(c)}/#/billing`,automaticTax});
+  const url=await gateway.createCheckout({accountId:c.var.account.id,customerId,priceId,planId:plan.id,successUrl:`${origin(c)}/#/thank-you`,cancelUrl:`${origin(c)}/#/billing`,automaticTax});
   return c.json({success:true,url})});
 
 portal.post('/billing/portal',async c=>{requireOwner(c);const customer=await one<{stripe_customer_id:string|null}>(c.env.DB,'SELECT stripe_customer_id FROM accounts WHERE id=?',c.var.account.id);

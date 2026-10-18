@@ -1,6 +1,6 @@
 # Project status and next steps
 
-_Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
+_Last updated: 2026-10-18 (portal mostly done; launch planned for late December 2026). This is the hand-off note._
 
 ## Done to date
 
@@ -56,6 +56,11 @@ _Last updated: 2026-10-04 (admin panel added). This is the hand-off note._
 - `POST /api/stripe/webhook` records subscriptions from Stripe events and logs each one in `webhook_events` (migration `0005_stripe_webhooks.sql`, tests in `tests/billing.test.ts`). Checkout now tags subscriptions with the account and requires a billing address and accepts tax IDs.
 - The sandbox account has **Managed Payments** on by default: Stripe (through Link) is the merchant of record and handles sales tax, so Checkout omits its own tax options unless Stripe Tax is active. Confirm this is intended before going live (it changes fees and who sells to the customer).
 - Not done: the add-on metered price (`addon_unit_price` undecided) and live mode.
+
+## Launch plan: late December 2026
+The customer portal is mostly done: sign-up and sign-in, project and sources, queries, runs with usage caps, reports and exports, billing (Stripe sandbox), settings, lifecycle emails, and the phone layout. It currently lives inside the sales site (`apps/web/src/app/`, routes `#/overview`, `#/billing`, …) with its API in `apps/api`. Before launch:
+1. **Move the portal to its own app and Vercel project:** `apps/portal` at `app.aioverviewhub.com`, with the API (`apps/api`), `CRON_SECRET` and the daily cron moving to that project. `apps/web` becomes marketing only, with "Log in" and "Start monitoring" linking to the portal. Add `https://app.aioverviewhub.com` to Neon Auth trusted domains, and point the Stripe webhook and `APP_URL` at the new domain.
+2. Then work through Next and the checklist below on launch week.
 
 ## Next
 1. **Go live with Stripe** (launch day): live product, price, webhook and Production `STRIPE_*` variables; see the checklist below.

@@ -9,7 +9,7 @@ export type Selection=Partial<Record<ProviderId,CollectionMethod[]>>;
 export interface Plan { id:string; name:string; monthlyPrice:number; maxQueries:number; allowedProviders:ProviderId[]; addonUnitPrice:number|null; runsPerPeriod:number; checksPerPeriod:number }
 export interface Subscription { status:string; periodStart:string|null; periodEnd:string|null; cancelAtPeriodEnd:boolean }
 export interface AccountRef { id:string; name:string; role:string }
-export interface Me { user:{email:string;name:string|null}; account:AccountRef&{notifyRun:boolean;notifyDrop:boolean}; accounts:AccountRef[]; plan:Plan; subscription:Subscription|null; entitled:boolean; paused:boolean }
+export interface Me { user:{email:string;name:string|null}; account:AccountRef&{notifyRun:boolean;notifyDrop:boolean}; accounts:AccountRef[]; plan:Plan; subscription:Subscription|null; subscriptionId:string|null; entitled:boolean; paused:boolean }
 export interface Project { id:string; name:string; primaryDomain:string; alternateDomains:string[]; brands:string[]; selection:Selection; location:Location; frequency:'manual'|'monthly'; lastRunAt:string|null; nextRunAt:string|null }
 export interface Query { id:string; text:string; tag:string|null }
 export interface RunSummary { id:string; status:RunStatus; createdAt:string; completedAt:string|null; startedBy:string; queries:number; total:number; done:number; failed:number; visibility:number; citationRate:number; mentionRate:number }
