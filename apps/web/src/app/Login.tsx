@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {Logo} from '../brand';
 import {auth} from '../session';
+import {track} from '../track';
 import {navigate} from './ui';
 
 type Mode='login'|'signup'|'reset';
@@ -14,7 +15,7 @@ export default function Login({mode}:{mode:Mode}){
   const submit=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setError(null);setNotice(null);
     try{
       if(mode==='login'){const {error:err}=await auth.signIn.email({email:email.trim(),password});if(err)return setError(authError(err));navigate('#/overview')}
-      else if(mode==='signup'){if(password.length<8)return setError('Use at least 8 characters for your password.');const {error:err}=await auth.signUp.email({email:email.trim(),password,name:name.trim()||email.split('@')[0]});if(err)return setError(authError(err));navigate('#/project')}
+      else if(mode==='signup'){if(password.length<8)return setError('Use at least 8 characters for your password.');const {error:err}=await auth.signUp.email({email:email.trim(),password,name:name.trim()||email.split('@')[0]});if(err)return setError(authError(err));track('sign_up',{method:'email'});navigate('#/welcome')}
       else if(!codeSent){const {error:err}=await auth.forgetPassword.emailOtp({email:email.trim()});if(err)return setError(authError(err));setCodeSent(true);setNotice('If an account exists for that email, we’ve sent a 6-digit code.')}
       else{if(password.length<8)return setError('Use at least 8 characters for your password.');const {error:err}=await auth.emailOtp.resetPassword({email:email.trim(),otp:code.trim(),password});if(err)return setError(authError(err));setNotice('Password updated. Sign in with your new password.');setCodeSent(false);navigate('#/login')}
     }catch(err){setError(authError(err as {message?:string}))}finally{setBusy(false)}};

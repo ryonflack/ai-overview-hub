@@ -6,11 +6,14 @@ import {MobileBar,useDrawer} from '../MobileBar';
 import {api,auth,errorText,selectAccount} from '../session';
 import type {Me,Project,Run,RunSummary} from '../session';
 import {BillingPage,QueriesPage,ReportsPage,SettingsPage} from './Pages';
+import {ThankYouPage,WelcomePage} from './Welcome';
 import {ProjectPage} from './Setup';
 import {Head,Loading,Problem,colors,formatDate,navigate,placeLabel,sourceLabel,useLoad} from './ui';
 
 export const pages=[['overview','▦ Overview'],['project','◎ Project & sources'],['queries','⌕ Queries'],['reports','▤ Reports'],['billing','◇ Billing'],['settings','⚙ Settings']] as const;
-export type Page=typeof pages[number][0];
+/** Confirmation pages reached by URL only (after sign-up and after Checkout); they are not in the sidebar. */
+export type Page=typeof pages[number][0]|'welcome'|'thank-you';
+const titles:Record<string,string>={welcome:'Welcome','thank-you':'Thank you'};
 const initials=(s:string)=>s.split(/[\s@.]+/).filter(Boolean).map(w=>w[0]).join('').slice(0,2).toUpperCase();
 
 /** The signed-in customer portal. Loads the user's workspace (/me) and routes between pages by URL hash (#/overview, …). */
@@ -22,7 +25,7 @@ export default function Portal({page}:{page:Page}){
   const m=me.data;
   const signOut=async()=>{await auth.signOut();selectAccount('');navigate('')};
   return <div className="app">
-    <MobileBar {...menu} title={pages.find(([id])=>id===page)?.[1].slice(2)??''}/>
+    <MobileBar {...menu} title={pages.find(([id])=>id===page)?.[1].slice(2)??titles[page]??''}/>
     <aside id="portal-nav" className={menu.open?'open':''} onClick={e=>{if((e.target as HTMLElement).closest('a'))menu.setOpen(false)}}><Logo/>
       {m.accounts.length>1?<label className="workspace switcher"><span>WORKSPACE</span><select value={m.account.id} onChange={e=>{selectAccount(e.target.value);void me.reload()}}>{m.accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>:<div className="workspace">{m.account.name.toUpperCase()}</div>}
       {pages.map(([id,label])=><a key={id} href={`#/${id}`} className={page===id?'active':'navlink'}>{label}</a>)}
@@ -32,8 +35,8 @@ export default function Portal({page}:{page:Page}){
     </aside>
     <div className="portal-main">
       {m.paused?<div className="betastrip" role="note"><span>Monitoring is paused for this workspace. Contact support to resume.</span></div>
-        :!m.entitled&&page!=='billing'?<div className="betastrip" role="note"><span className="beta-pill">Beta</span><span>{m.subscription?.status==='past_due'?'Your last payment failed. Update your payment method to keep monitoring.':'Choose a plan to start monitoring.'}</span><a href="#/billing">{m.subscription?.status==='past_due'?'Update payment →':'See plan →'}</a></div>:null}
-      {page==='project'?<ProjectPage me={m}/>:page==='queries'?<QueriesPage me={m}/>:page==='reports'?<ReportsPage/>:page==='billing'?<BillingPage me={m} refresh={me.reload}/>:page==='settings'?<SettingsPage me={m} refresh={me.reload}/>:<Overview me={m}/>}
+        :!m.entitled&&page!=='billing'&&page!=='welcome'&&page!=='thank-you'?<div className="betastrip" role="note"><span className="beta-pill">Beta</span><span>{m.subscription?.status==='past_due'?'Your last payment failed. Update your payment method to keep monitoring.':'Choose a plan to start monitoring.'}</span><a href="#/billing">{m.subscription?.status==='past_due'?'Update payment →':'See plan →'}</a></div>:null}
+      {page==='welcome'?<WelcomePage me={m}/>:page==='thank-you'?<ThankYouPage me={m} refresh={me.reload}/>:page==='project'?<ProjectPage me={m}/>:page==='queries'?<QueriesPage me={m}/>:page==='reports'?<ReportsPage/>:page==='billing'?<BillingPage me={m} refresh={me.reload}/>:page==='settings'?<SettingsPage me={m} refresh={me.reload}/>:<Overview me={m}/>}
     </div>
   </div>
 }
